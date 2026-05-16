@@ -1,6 +1,7 @@
 "use client";
 
 import { HackMateLogo } from "@/components/HackMateLogo";
+import { WebVoiceProfileForm } from "@/components/WebVoiceProfileForm";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -20,25 +21,35 @@ export default function PublicEventPage() {
   const [event, setEvent] = useState<EventInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setLoading(true);
       const res = await fetch(`/api/public/events/${encodeURIComponent(slug)}`);
       const data = await res.json();
+      if (cancelled) return;
       if (!res.ok) {
         setError(data.error ?? "Event not found");
+        setEvent(null);
+        setDone(null);
+        setRegistrationId(null);
         setLoading(false);
         return;
       }
+      setError(null);
       setEvent(data.event);
+      setDone(null);
+      setRegistrationId(null);
       setLoading(false);
     })();
-  }, [slug]);
-
-  useEffect(() => {
-    setDone(null);
-    setError(null);
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -70,6 +81,7 @@ export default function PublicEventPage() {
       return;
     }
     setDone(data.message ?? "You’re registered.");
+    setRegistrationId(typeof data.registrationId === "string" ? data.registrationId : null);
     e.currentTarget.reset();
   }
 
@@ -136,6 +148,9 @@ export default function PublicEventPage() {
             <h2 className="text-2xl font-semibold tracking-tight">You&apos;re signed up</h2>
             <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-[var(--muted)]">{done}</p>
             <p className="mt-8 text-sm font-medium text-[var(--foreground)]">{event.title}</p>
+            {registrationId ? (
+              <WebVoiceProfileForm eventSlug={slug} registrationId={registrationId} />
+            ) : null}
           </div>
         ) : !event.registrationOpen ? (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
@@ -211,8 +226,9 @@ export default function PublicEventPage() {
             <label className="flex items-start gap-3 text-sm">
               <input name="consentToCall" type="checkbox" className="mt-1" required />
               <span className="text-[var(--muted)]">
-                I agree to be contacted by phone for HackMate voice team matching, and I understand my
-                answers are used only for hackathon team formation (GDPR-friendly processing).
+                I agree to be contacted for HackMate voice team matching (phone or optional browser voice
+                on this site), and I understand my answers are used only for hackathon team formation
+                (GDPR-friendly processing).
               </span>
             </label>
 

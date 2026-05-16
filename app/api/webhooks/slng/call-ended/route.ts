@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { extractProfileFromTranscript } from "@/lib/extraction";
+import { extractAndStoreParticipantProfile } from "@/lib/participant-voice-ingest";
 import { transcriptToText } from "@/lib/transcript";
 
 type Payload = {
@@ -149,61 +149,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, callId: call.id, emptyTranscript: true });
   }
 
-  const extracted = await extractProfileFromTranscript(transcriptText, participant.fullName);
-  extracted.participant_name = participant.fullName;
-
+  const extractResult = await extractAndStoreParticipantProfile(
+    participantId,
+    transcriptText,
+    participant.fullName,
+  );
   const profileStatus =
-    extracted.confidence_score < 0.5 || extracted.missing_fields.length > 2
-      ? "needs_manual_review"
-      : "ready";
-
-  await prisma.participantProfile.upsert({
-    where: { participantId },
-    create: {
-      participantId,
-      skills: extracted.skills,
-      primaryRole: extracted.primary_role,
-      strongestSkill: extracted.strongest_skill,
-      experienceLevel: extracted.experience_level,
-      projectIdea: extracted.project_idea,
-      ideaSummary: extracted.idea_summary,
-      domainInterests: extracted.domain_interests,
-      wantsToLead: extracted.wants_to_lead,
-      openToJoinOtherTeam: extracted.open_to_join_other_team,
-      preferredTeamSize: extracted.preferred_team_size,
-      neededTeammates: extracted.needed_teammates,
-      availability: extracted.availability,
-      existingTeamStatus: extracted.existing_team_status,
-      confidenceScore: extracted.confidence_score,
-      missingFields: extracted.missing_fields,
-      extractionNotes: extracted.extraction_notes,
-      rawExtraction: extracted as object,
-    },
-    update: {
-      skills: extracted.skills,
-      primaryRole: extracted.primary_role,
-      strongestSkill: extracted.strongest_skill,
-      experienceLevel: extracted.experience_level,
-      projectIdea: extracted.project_idea,
-      ideaSummary: extracted.idea_summary,
-      domainInterests: extracted.domain_interests,
-      wantsToLead: extracted.wants_to_lead,
-      openToJoinOtherTeam: extracted.open_to_join_other_team,
-      preferredTeamSize: extracted.preferred_team_size,
-      neededTeammates: extracted.needed_teammates,
-      availability: extracted.availability,
-      existingTeamStatus: extracted.existing_team_status,
-      confidenceScore: extracted.confidence_score,
-      missingFields: extracted.missing_fields,
-      extractionNotes: extracted.extraction_notes,
-      rawExtraction: extracted as object,
-    },
-  });
-
-  await prisma.participant.update({
-    where: { id: participantId },
-    data: { profileStatus },
-  });
+    "emptyTranscript" in extractResult ? "needs_manual_review" : extractResult.profileStatus;
 
   return NextResponse.json({ ok: true, callId: call.id, profileStatus });
 }

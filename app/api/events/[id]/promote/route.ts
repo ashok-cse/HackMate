@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendParticipantPromotedEmail } from "@/lib/resend-promoted-email";
 import { hackmateServerLog } from "@/lib/server-log";
 
 export const runtime = "nodejs";
@@ -60,6 +61,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     await prisma.eventRegistration.update({
       where: { id: r.id },
       data: { promotedParticipantId: participant.id },
+    });
+    await sendParticipantPromotedEmail({
+      to: email,
+      fullName: r.fullName,
+      eventTitle: event.title,
+      eventSlug: event.slug,
     });
     promoted++;
   }
