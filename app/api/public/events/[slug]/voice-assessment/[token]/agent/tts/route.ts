@@ -3,6 +3,7 @@ import { groqConfigured, groqSpeech } from "@/lib/groq-voice";
 import { participantForVoiceLink } from "@/lib/voice-assessment-token";
 
 export const runtime = "nodejs";
+export const maxDuration = 90;
 
 function stripCompleteTokenForSpeech(text: string): string {
   return text

@@ -54,7 +54,10 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     path: "/api/webhooks/retell",
-    hint: "Configure webhooks at https://www.retellai.com/ → dashboard: POST call_ended to this URL.",
+    docs: "https://docs.retellai.com/features/webhook-overview",
+    handledEvent: "call_ended",
+    hint:
+      "Retell POSTs configurable events per agent (voice defaults often include call_started, call_ended, call_analyzed; plus transcript_updated, transfer_*, chat_* per docs). HackMate only persists transcripts and runs extraction on call_ended; any other event is acknowledged with 204. You may set webhook_events on the agent to trim traffic.",
   });
 }
 

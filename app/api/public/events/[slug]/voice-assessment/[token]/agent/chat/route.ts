@@ -3,6 +3,7 @@ import { groqAgentReply, groqConfigured } from "@/lib/groq-voice";
 import { participantForVoiceLink } from "@/lib/voice-assessment-token";
 
 export const runtime = "nodejs";
+export const maxDuration = 90;
 
 type Msg = { role: string; content: string };
 

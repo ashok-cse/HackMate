@@ -3,6 +3,7 @@ import { groqConfigured, groqTranscribe } from "@/lib/groq-voice";
 import { participantForVoiceLink } from "@/lib/voice-assessment-token";
 
 export const runtime = "nodejs";
+export const maxDuration = 90;
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 

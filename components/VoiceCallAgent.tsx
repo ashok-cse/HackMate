@@ -58,6 +58,30 @@ function agentBase(eventSlug: string, token: string) {
   return `/api/public/events/${encodeURIComponent(eventSlug)}/voice-assessment/${encodeURIComponent(token)}/agent`;
 }
 
+async function readVoiceApiJson(res: Response): Promise<{
+  ok: boolean;
+  data: Record<string, unknown>;
+  parseFailed: boolean;
+}> {
+  const text = await res.text();
+  let parseFailed = false;
+  let data: Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parseFailed = true;
+      data = {
+        error:
+          res.status >= 502
+            ? "Voice service temporarily unavailable. Try again shortly."
+            : "Invalid response from server.",
+      };
+    }
+  }
+  return { ok: res.ok && !parseFailed, data, parseFailed };
+}
+
 function VoiceMicGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
@@ -160,12 +184,12 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "TTS failed");
+      const { ok, data } = await readVoiceApiJson(res);
+      if (!ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "TTS failed");
       }
-      const mime = data.mimeType ?? "audio/mpeg";
-      const b64 = data.audioBase64 as string;
+      const mime = typeof data.mimeType === "string" ? data.mimeType : "audio/mpeg";
+      const b64 = typeof data.audioBase64 === "string" ? data.audioBase64 : "";
 
       setPhase("speaking");
       try {
@@ -205,11 +229,13 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
 
       try {
         const tr = await fetch(`${base}/transcribe`, { method: "POST", body: fd });
-        const trData = await tr.json();
-        if (!tr.ok) {
-          throw new Error(trData.error ?? "Transcription failed");
+        const trParsed = await readVoiceApiJson(tr);
+        if (!trParsed.ok) {
+          throw new Error(
+            typeof trParsed.data.error === "string" ? trParsed.data.error : "Transcription failed",
+          );
         }
-        const userText = String(trData.text ?? "").trim();
+        const userText = String(trParsed.data.text ?? "").trim();
         if (!userText) {
           setPhase("ready");
           return;
@@ -224,11 +250,11 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ messages: nextMsgs }),
         });
-        const crData = await cr.json();
-        if (!cr.ok) {
-          throw new Error(crData.error ?? "Agent failed");
+        const crParsed = await readVoiceApiJson(cr);
+        if (!crParsed.ok) {
+          throw new Error(typeof crParsed.data.error === "string" ? crParsed.data.error : "Agent failed");
         }
-        const assistantText = String(crData.text ?? "").trim();
+        const assistantText = String(crParsed.data.text ?? "").trim();
         if (!assistantText) {
           throw new Error("Empty reply");
         }
@@ -272,31 +298,45 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
       setGreeting(null);
       try {
         const res = await fetch(`${base}/opening`, { method: "POST" });
-        let data: { error?: string; text?: string; mimeType?: string; audioBase64?: string };
-        try {
-          data = await res.json();
-        } catch {
-          if (!cancelled) {
-            setLocalError("Invalid response from server.");
-            setPhase("ready");
-          }
-          return;
-        }
+        const openParsed = await readVoiceApiJson(res);
         if (cancelled) return;
-        if (!res.ok) {
-          setLocalError(data.error ?? "Could not start the agent.");
+        if (!openParsed.ok) {
+          setLocalError(
+            typeof openParsed.data.error === "string"
+              ? openParsed.data.error
+              : "Could not start the agent.",
+          );
           setPhase("ready");
           return;
         }
-        const text = data.text as string;
+        const text = String(openParsed.data.text ?? "").trim();
+        if (!text) {
+          setLocalError("Could not start the agent.");
+          setPhase("ready");
+          return;
+        }
         const initial: ChatMessage[] = [{ role: "assistant", content: text }];
         messagesRef.current = initial;
         setMessages(initial);
-        setGreeting({
-          mimeType: data.mimeType ?? "audio/mpeg",
-          audioBase64: data.audioBase64 ?? "",
+
+        const ttsRes = await fetch(`${base}/tts`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
         });
-        setPhase("awaiting_start");
+        const ttsParsed = await readVoiceApiJson(ttsRes);
+        if (cancelled) return;
+        const b64 = typeof ttsParsed.data.audioBase64 === "string" ? ttsParsed.data.audioBase64 : "";
+        if (ttsParsed.ok && b64.length > 0) {
+          setGreeting({
+            mimeType: typeof ttsParsed.data.mimeType === "string" ? ttsParsed.data.mimeType : "audio/mpeg",
+            audioBase64: b64,
+          });
+          setPhase("awaiting_start");
+        } else {
+          setGreeting(null);
+          setPhase("ready");
+        }
       } catch (e) {
         if (!cancelled) {
           setLocalError(e instanceof Error ? e.message : "Could not start the voice session.");
@@ -504,13 +544,13 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
         body: JSON.stringify({ transcript }),
       },
     );
-    const data = await res.json();
+    const parsed = await readVoiceApiJson(res);
     setSubmitting(false);
-    if (!res.ok) {
-      setSubmitErr(data.error ?? "Submit failed");
+    if (!parsed.ok) {
+      setSubmitErr(typeof parsed.data.error === "string" ? parsed.data.error : "Submit failed");
       return;
     }
-    setSubmitOk(data.message ?? "Saved.");
+    setSubmitOk(typeof parsed.data.message === "string" ? parsed.data.message : "Saved.");
     setPhase("done");
   }
 

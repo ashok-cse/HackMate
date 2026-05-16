@@ -1,20 +1,11 @@
 import { NextResponse } from "next/server";
-import {
-  groqAgentReply,
-  groqConfigured,
-  groqSpeech,
-  openingBootstrapMessage,
-} from "@/lib/groq-voice";
+import { groqAgentReply, groqConfigured, openingBootstrapMessage } from "@/lib/groq-voice";
 import { participantForVoiceLink } from "@/lib/voice-assessment-token";
+import { hackmateServerLog, truncateForStderrLog } from "@/lib/server-log";
 
 export const runtime = "nodejs";
-
-function stripCompleteTokenForSpeech(text: string): string {
-  return text
-    .replace(/\s*ASSESSMENT_COMPLETE\s*$/im, "")
-    .trim()
-    .slice(0, 4000);
-}
+/** Chat-only handshake; TTS is POST /agent/tts (smaller requests, fewer proxy timeouts). */
+export const maxDuration = 90;
 
 export async function POST(_req: Request, ctx: { params: Promise<{ slug: string; token: string }> }) {
   const { slug, token } = await ctx.params;
@@ -29,14 +20,14 @@ export async function POST(_req: Request, ctx: { params: Promise<{ slug: string;
   try {
     const history = [openingBootstrapMessage(participant.event!.title)];
     const text = await groqAgentReply(history);
-    const spoken = stripCompleteTokenForSpeech(text);
-    const { buffer, contentType } = await groqSpeech(spoken || text);
-    return NextResponse.json({
-      text,
-      audioBase64: buffer.toString("base64"),
-      mimeType: contentType,
-    });
-  } catch {
+    return NextResponse.json({ text });
+  } catch (e) {
+    hackmateServerLog(
+      "hackmate:voice-opening",
+      "groq_failed",
+      { err: truncateForStderrLog(e instanceof Error ? e.message : String(e)) },
+      "error",
+    );
     return NextResponse.json({ error: "Could not start voice agent" }, { status: 502 });
   }
 }
