@@ -58,13 +58,19 @@ Copy from **`.env.example`** and adjust.
 | `HACKMATE_ADMIN_TOKEN` | If set, protects dashboard/API; omit for open local dev. |
 | `RETELL_API_KEY`, `RETELL_FROM_NUMBER` | Outbound calls via [Retell AI](https://www.retellai.com/); without both, participants stay queued locally until you configure them. |
 | `RETELL_AGENT_ID` | Optional override if the caller ID is not already bound to an agent. |
+| `RETELL_LLM_CONTEXT` | Optional. Sent on every outbound dial as dynamic variable **`hackmate_brief`** — reference `{{hackmate_brief}}` in your Retell agent prompt for hackathon-specific instructions. |
+| `RETELL_WEBHOOK_VERIFICATION_KEY` | Optional. Use the **webhook-enabled** API key from the Retell dashboard for verifying `X-Retell-Signature`. If unset, **`RETELL_API_KEY`** is used (must still be webhook-enabled for real events to verify). See [Retell secure webhook](https://docs.retellai.com/features/secure-webhook). |
+| `RETELL_WEBHOOK_REJECT_UNSIGNED` | Default: unsigned “Test” requests from the Retell UI are allowed (`false`). Set `true` to require a signature on every POST (Tests may return 401). |
 | `PIONEER_INFERENCE_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID` | Optional transcript extraction. Default URL targets **GLiNER**: `https://api.pioneer.ai/inference` with `X-API-Key` and a model such as `fastino/gliner2-base-v1` ([docs](https://docs.pioneer.ai/api-reference/inference/pioneer)). For **LLM JSON** extraction, use `https://api.pioneer.ai/v1/chat/completions` and a decoder model id. Optional `PIONEER_INFERENCE_THRESHOLD` (0–1). A **custom** HTTPS URL can act as a proxy: `Authorization: Bearer …`, body `{ "transcript" }`, JSON profile response. |
 
 `NEXT_PUBLIC_*` values are embedded at **build time**; change them in Docker/EasyPanel and **rebuild** when deploying.
 
-### Retell AI webhooks
+### Retell AI webhooks & agent prompt
 
-Register **`POST https://YOUR_DOMAIN/api/webhooks/retell`** in the Retell dashboard for **`call_ended`** events. Outbound calls attach `participant_id` in metadata and dynamic variables so the webhook can match the participant. If **`RETELL_API_KEY`** is set, requests are verified with the **`x-retell-signature`** header.
+Register **`POST https://YOUR_DOMAIN/api/webhooks/retell`** for **`call_ended`**. HackMate reads **`participant_id`** from call metadata or `retell_llm_dynamic_variables` (set automatically on outbound).
+
+- **401 on “Test”:** The Retell dashboard **Test** button often POSTs **without** `X-Retell-Signature`. With verification keys set, HackMate now answers that with **200** JSON by default. **Live** webhooks include the signature ([docs](https://docs.retellai.com/features/secure-webhook)). Use an API key that shows the **webhook** badge in Retell; put it in **`RETELL_WEBHOOK_VERIFICATION_KEY`** (or **`RETELL_API_KEY`**).
+- **Customize the agent:** In the Retell dashboard, edit the agent’s prompt and use dynamic variables HackMate sends: **`{{participant_id}}`**, **`{{full_name}}`**, **`{{hackathon_name}}`**, **`{{known_skills}}`**, etc., plus **`{{hackmate_brief}}`** when **`RETELL_LLM_CONTEXT`** is set in env (hackathon rules / tone).
 
 ## Deploy (Docker / EasyPanel)
 

@@ -51,6 +51,13 @@ function retellOverrideAgentId(): string | undefined {
   return cleanEnv(process.env.RETELL_AGENT_ID);
 }
 
+function mergedRetellLlmVariables(participant: CallParticipant): Record<string, string> {
+  const base = participantVoiceMetadata(participant);
+  const brief = cleanEnv(process.env.RETELL_LLM_CONTEXT);
+  if (brief) base.hackmate_brief = brief.slice(0, 12_000);
+  return base;
+}
+
 export function retellConfigured(): boolean {
   return Boolean(retellApiKey() && retellFromNumber());
 }
@@ -81,7 +88,7 @@ export async function dispatchRetellCall(
     };
   }
 
-  const args = participantVoiceMetadata(participant);
+  const args = mergedRetellLlmVariables(participant);
   const metadata: Record<string, string> = { ...args };
   const agentOverride = retellOverrideAgentId();
 

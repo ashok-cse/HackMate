@@ -60,11 +60,37 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  const apiKey = process.env.RETELL_API_KEY?.trim();
-  if (apiKey) {
-    const sig = req.headers.get("x-retell-signature");
-    if (!verifyRetellWebhookSignature(rawBody, apiKey, sig)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  const verifyKey =
+    process.env.RETELL_WEBHOOK_VERIFICATION_KEY?.trim() || process.env.RETELL_API_KEY?.trim();
+  const sig =
+    req.headers.get("x-retell-signature") ?? req.headers.get("X-Retell-Signature");
+  const strictUnsigned =
+    process.env.RETELL_WEBHOOK_REJECT_UNSIGNED?.trim().toLowerCase() === "true";
+
+  if (verifyKey) {
+    if (sig) {
+      if (!verifyRetellWebhookSignature(rawBody, verifyKey, sig)) {
+        return NextResponse.json(
+          {
+            error: "Invalid signature",
+            hint:
+              "Use an API key with the webhook badge in Retell and set RETELL_WEBHOOK_VERIFICATION_KEY (or RETELL_API_KEY) to that key. See https://docs.retellai.com/features/secure-webhook",
+          },
+          { status: 401 },
+        );
+      }
+    } else if (strictUnsigned) {
+      return NextResponse.json(
+        { error: "Missing X-Retell-Signature" },
+        { status: 401 },
+      );
+    } else {
+      return NextResponse.json({
+        ok: true,
+        test: true,
+        message:
+          "HackMate: no X-Retell-Signature (Retell dashboard “Test” often omits it). Live call_ended events are signed. Verification key must be webhook-enabled.",
+      });
     }
   }
 
