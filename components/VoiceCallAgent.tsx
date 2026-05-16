@@ -58,6 +58,14 @@ function agentBase(eventSlug: string, token: string) {
   return `/api/public/events/${encodeURIComponent(eventSlug)}/voice-assessment/${encodeURIComponent(token)}/agent`;
 }
 
+function VoiceMicGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M12 14c1.66 0 3-1.34 3-3V7c0-1.66-1.34-3-3-3S9 5.34 9 7v4c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.22 14.53 16 12 16s-4.52-1.78-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3.18 3.06 5.61 6.41 6.04V21c0 .55.45 1 1 1s1-.45 1-1v-4.76c3.34-.43 5.93-2.86 6.41-6.03.09-.61-.39-1.15-1-1.15z" />
+    </svg>
+  );
+}
+
 export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [phase, setPhase] = useState<
@@ -71,6 +79,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
   const [submitting, setSubmitting] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>("handsfree");
   const [voiceLevel, setVoiceLevel] = useState(0);
+  const [conversationOpen, setConversationOpen] = useState(false);
   const interviewComplete = messages.some((m) => m.role === "assistant" && /ASSESSMENT_COMPLETE/i.test(m.content));
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -505,13 +514,51 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
     setPhase("done");
   }
 
-  const canInteractMic =
-    voiceAgentAvailable &&
-    phase !== "init" &&
-    phase !== "awaiting_start" &&
-    phase !== "processing" &&
-    phase !== "done" &&
-    !tapToPlay;
+  const handsfreeMicClickOk =
+    (phase === "awaiting_start" && Boolean(greeting?.audioBase64)) ||
+    Boolean(
+      tapToPlay === null &&
+        inputMode === "handsfree" &&
+        phase !== "init" &&
+        phase !== "awaiting_start" &&
+        phase !== "processing" &&
+        phase !== "listening" &&
+        phase !== "done" &&
+        (phase === "ready" || phase === "speaking"),
+    );
+
+  /** Hold must stay enabled while recording so pointer-up still fires — only gate pointer-down starts. */
+  const holdRecordingStartOk =
+    inputMode === "hold" &&
+    !tapToPlay &&
+    phase === "ready" &&
+    voiceAgentAvailable;
+
+  const handsfreeMicDisabled =
+    tapToPlay !== null ||
+    phase === "init" ||
+    phase === "listening" ||
+    phase === "processing" ||
+    phase === "done" ||
+    !handsfreeMicClickOk;
+
+  const micMutedLook =
+    tapToPlay !== null ||
+    phase === "init" ||
+    phase === "processing" ||
+    phase === "done" ||
+    (inputMode === "hold" && phase === "speaking");
+
+  let statusCaption = "";
+  if (phase === "init") statusCaption = "Connecting…";
+  else if (tapToPlay) statusCaption = "Playback needed — tap play reply below";
+  else if (phase === "awaiting_start") statusCaption = "Tap to start";
+  else if (phase === "listening")
+    statusCaption = inputMode === "hold" ? "Recording — release to send" : "Listening — pause when done";
+  else if (phase === "processing") statusCaption = "Thinking…";
+  else if (phase === "speaking") statusCaption = "Agent speaking…";
+  else if (phase === "done") statusCaption = "Saved";
+  else if (phase === "ready") statusCaption = inputMode === "hold" ? "Hold to speak" : "Tap to speak";
 
   if (!voiceAgentAvailable) {
     return (
@@ -523,164 +570,190 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="text-lg font-semibold tracking-tight">Interactive voice agent</h3>
-        <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-          This works like a short phone screen: the agent speaks, then <strong>you</strong> speak. Tap{" "}
-          <strong>Your turn</strong>, talk naturally, and <strong>pause when you&apos;re done</strong> — we detect the
-          pause and send your turn (Groq Whisper). The agent answers with Groq TTS. You can <strong>interrupt</strong>{" "}
-          playback by starting your turn. True duplex streaming isn&apos;t possible with file-based STT in the browser;
-          this is the closest pattern without a telephony stack.
-        </p>
-        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-[var(--muted)]">
-          <input
-            type="checkbox"
-            checked={inputMode === "hold"}
-            onChange={(e) => setInputMode(e.target.checked ? "hold" : "handsfree")}
-            className="rounded border-[var(--border)]"
+    <div className="mx-auto w-full max-w-lg">
+      <button
+        type="button"
+        onClick={() => setConversationOpen((v) => !v)}
+        className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-[var(--card)] px-4 py-2 text-sm font-medium text-slate-600 shadow-sm dark:border-[var(--border)] dark:bg-[var(--card)] dark:text-[var(--muted)]"
+      >
+        <svg
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className={`h-4 w-4 text-slate-500 transition-transform duration-200 dark:text-[var(--muted)] ${conversationOpen ? "rotate-90" : ""}`}
+          aria-hidden
+        >
+          <path
+            fillRule="evenodd"
+            d="M8.22 5.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 010-1.06z"
+            clipRule="evenodd"
           />
-          Use hold-to-talk instead of pause-to-send
-        </label>
-      </div>
+        </svg>
+        {conversationOpen ? "Hide conversation" : "Show conversation"}
+      </button>
 
-      {localError ? <p className="text-sm text-red-600">{localError}</p> : null}
+      {localError ? <p className="mb-4 text-center text-sm text-red-600 dark:text-red-400">{localError}</p> : null}
 
       {tapToPlay ? (
-        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm">
-          <p className="text-[var(--foreground)]">Tap to play the agent&apos;s latest reply.</p>
+        <div className="mb-5 rounded-2xl border border-sky-200/80 bg-sky-50/90 px-4 py-4 text-center text-sm text-slate-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-slate-200">
+          <p>Tap to hear the agent (browser blocked auto-play).</p>
           <button
             type="button"
             onClick={() => void playPendingTap()}
-            className="mt-2 rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500"
+            className="mt-3 rounded-full bg-sky-500 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-sky-500/25 hover:bg-sky-400"
           >
             Play reply
           </button>
         </div>
       ) : null}
 
-      {phase === "awaiting_start" && greeting ? (
-        <div className="flex flex-wrap gap-3">
+      <div className="rounded-[1.75rem] bg-[var(--card)] px-8 pb-10 pt-12 shadow-[0_22px_50px_-12px_rgba(14,165,233,0.22)] dark:shadow-[0_24px_50px_-12px_rgba(0,0,0,0.45)]">
+        <div className="flex flex-col items-center gap-8">
           <button
             type="button"
-            onClick={() => void playGreetingFromTap()}
-            className="rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-500"
+            aria-label={
+              phase === "awaiting_start"
+                ? "Play introduction"
+                : inputMode === "hold"
+                  ? phase === "listening"
+                    ? "Recording — release to send"
+                    : "Hold to speak"
+                  : phase === "listening"
+                    ? "Listening"
+                    : "Start speaking"
+            }
+            disabled={inputMode === "handsfree" ? handsfreeMicDisabled : false}
+            onClick={() => {
+              if (phase === "awaiting_start" && greeting?.audioBase64) {
+                void playGreetingFromTap();
+                return;
+              }
+              if (inputMode !== "handsfree") return;
+              if (handsfreeMicDisabled) return;
+              void startHandsFree();
+            }}
+            onPointerDown={
+              holdRecordingStartOk
+                ? () => {
+                    void pushStart();
+                  }
+                : undefined
+            }
+            onPointerUp={
+              inputMode === "hold" && phase === "listening"
+                ? () => {
+                    void pushEnd();
+                  }
+                : undefined
+            }
+            onPointerLeave={
+              inputMode === "hold" && phase === "listening"
+                ? () => {
+                    void pushEnd();
+                  }
+                : undefined
+            }
+            className={`relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full text-white outline-none ring-offset-2 ring-offset-[var(--card)] transition-transform focus-visible:ring-2 focus-visible:ring-sky-400 ${
+              phase === "listening"
+                ? "scale-105 bg-sky-500 shadow-[0_14px_40px_-10px_rgba(14,165,233,0.55)] ring-4 ring-sky-300/50 dark:ring-sky-500/30"
+                : "bg-sky-500 shadow-[0_16px_40px_-12px_rgba(14,165,233,0.45)] hover:bg-sky-400"
+            } ${micMutedLook && phase !== "listening" ? "opacity-45 grayscale-[0.15]" : ""} cursor-pointer`}
           >
-            Tap to start — play introduction
+            {phase === "init" ? (
+              <span className="flex h-10 w-10 animate-pulse rounded-full bg-white/30" />
+            ) : (
+              <VoiceMicGlyph className="h-[2.85rem] w-[2.85rem] text-white" />
+            )}
           </button>
-          <button
-            type="button"
-            onClick={skipGreetingAudio}
-            className="rounded-lg border border-[var(--border)] px-4 py-3 text-sm font-medium hover:bg-[var(--background)]"
-          >
-            Skip audio (read only)
-          </button>
+
+          <div className="flex flex-col items-center gap-2 text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              {statusCaption}
+            </p>
+            {phase === "awaiting_start" ? (
+              <button
+                type="button"
+                onClick={skipGreetingAudio}
+                className="text-xs font-medium text-sky-600 underline decoration-sky-300 underline-offset-2 hover:text-sky-500 dark:text-sky-400 dark:decoration-sky-700"
+              >
+                Skip introduction (read transcript only)
+              </button>
+            ) : null}
+          </div>
+
+          {inputMode === "handsfree" && phase === "listening" ? (
+            <div className="w-full max-w-xs space-y-3 px-2">
+              <button
+                type="button"
+                onClick={() => void endListening()}
+                className="w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-sm font-medium text-[var(--foreground)] hover:bg-slate-50 dark:hover:bg-slate-800/50"
+              >
+                Stop &amp; send now
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs tabular-nums text-[var(--muted)]">{Math.round(voiceLevel * 100)}%</span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                  <div
+                    className="h-full rounded-full bg-sky-400 transition-[width] duration-75 dark:bg-sky-500"
+                    style={{ width: `${Math.round(voiceLevel * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <label className="mt-6 flex cursor-pointer items-center justify-center gap-2 text-sm text-[var(--muted)]">
+        <input
+          type="checkbox"
+          checked={inputMode === "hold"}
+          onChange={(e) => setInputMode(e.target.checked ? "hold" : "handsfree")}
+          className="rounded border-[var(--border)]"
+        />
+        Hold to talk instead of pause-to-send
+      </label>
+
+      <details className="mt-4 rounded-xl border border-[var(--border)]/80 bg-[var(--card)]/60 px-4 py-3 text-sm backdrop-blur-sm dark:bg-[var(--card)]/40 [&_summary]:cursor-pointer [&_summary]:font-medium [&_summary]:text-[var(--muted)] [&_summary]:outline-none [&_summary]:focus-visible:ring-2 [&_summary]:focus-visible:ring-sky-400">
+        <summary>How this session works</summary>
+        <p className="mt-3 leading-relaxed text-[var(--muted)]">
+          Like a phone screen: the agent speaks, then it&apos;s your turn. Pause when finished — we send your speech for
+          transcription. You can interrupt playback by tapping the mic during an answer.
+        </p>
+      </details>
+
+      {conversationOpen ? (
+        <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--card)]/90 p-4 shadow-sm backdrop-blur-sm dark:bg-[var(--card)]/70">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Conversation</p>
+          <ul className="mt-3 max-h-72 space-y-3 overflow-y-auto text-sm">
+            {messages.map((m, i) => (
+              <li key={i} className={m.role === "assistant" ? "text-[var(--foreground)]" : "text-[var(--muted)]"}>
+                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                  {m.role === "assistant" ? "Agent" : "You"}
+                </span>
+                <span className="text-[var(--foreground)]"> — {stripComplete(m.content) || "…"}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Live conversation</p>
-        <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto text-sm">
-          {messages.map((m, i) => (
-            <li key={i} className={m.role === "assistant" ? "text-[var(--foreground)]" : "text-[var(--muted)]"}>
-              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                {m.role === "assistant" ? "Agent" : "You"}
-              </span>
-              <span className="text-[var(--foreground)]"> — {stripComplete(m.content) || "…"}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        {inputMode === "handsfree" ? (
-          <>
-            <button
-              type="button"
-              disabled={!canInteractMic || phase === "listening"}
-              onClick={() => void startHandsFree()}
-              className="rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Your turn — tap, speak, pause when done
-            </button>
-            {phase === "listening" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void endListening()}
-                  className="rounded-lg border border-[var(--border)] px-4 py-3 text-sm font-medium hover:bg-[var(--card)]"
-                >
-                  Stop &amp; send now
-                </button>
-                <div className="flex min-w-[140px] flex-1 items-center gap-2">
-                  <span className="text-xs text-[var(--muted)]">Level</span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--border)]">
-                    <div
-                      className="h-full rounded-full bg-emerald-500 transition-[width] duration-75"
-                      style={{ width: `${Math.round(voiceLevel * 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <span className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                  </span>
-                  Listening… pause when finished
-                </span>
-              </>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              disabled={
-                !canInteractMic || phase === "speaking" || phase === "listening" || Boolean(tapToPlay)
-              }
-              onPointerDown={() => void pushStart()}
-              onPointerUp={() => void pushEnd()}
-              onPointerLeave={() => {
-                if (phase === "listening") void pushEnd();
-              }}
-              className="rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {phase === "listening" ? "Release to send" : "Hold to speak"}
-            </button>
-            {phase === "listening" ? (
-              <span className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                Recording…
-              </span>
-            ) : null}
-          </>
-        )}
-
-        {phase === "processing" ? <span className="text-sm text-[var(--muted)]">Thinking…</span> : null}
-        {phase === "speaking" ? <span className="text-sm text-[var(--muted)]">Agent speaking…</span> : null}
-        {phase === "init" ? <span className="text-sm text-[var(--muted)]">Connecting…</span> : null}
-      </div>
-
       {interviewComplete ? (
-        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+        <p className="mt-6 text-center text-sm font-medium text-emerald-700 dark:text-emerald-300">
           Interview complete — submit below so we can run team matching on your answers.
         </p>
       ) : (
-        <p className="text-xs text-[var(--muted)]">
-          The agent will signal when enough is covered. You can also submit anytime after a few exchanges.
+        <p className="mt-6 text-center text-xs text-[var(--muted)]">
+          The agent will signal when enough is covered. Submit after a short exchange when you&apos;re ready.
         </p>
       )}
 
-      <form onSubmit={(e) => void onSubmitFinal(e)} className="space-y-2 border-t border-[var(--border)] pt-5">
-        {submitErr ? <p className="text-sm text-red-600">{submitErr}</p> : null}
+      <form onSubmit={(e) => void onSubmitFinal(e)} className="mt-8 space-y-2 border-t border-[var(--border)] pt-6">
+        {submitErr ? <p className="text-sm text-red-600 dark:text-red-400">{submitErr}</p> : null}
         {submitOk ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{submitOk}</p> : null}
         <button
           type="submit"
           disabled={submitting || phase === "done" || !messages.some((m) => m.role === "user")}
-          className="rounded-lg bg-[var(--foreground)] px-4 py-2 text-sm font-medium text-[var(--background)] hover:opacity-90 disabled:opacity-45"
+          className="w-full rounded-full bg-[var(--foreground)] py-3 text-sm font-semibold text-[var(--background)] hover:opacity-90 disabled:opacity-45 sm:w-auto sm:min-w-[12rem] sm:px-8"
         >
           {submitting ? "Saving…" : "Submit voice profile"}
         </button>

@@ -49,6 +49,15 @@ function participantIdFromCall(call: RetellCallPayload): string | undefined {
   return stringFrom(dyn.participant_id);
 }
 
+/** Lets Retell / browser “test URL” pings succeed (POST-only routes often 404 on GET). */
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    path: "/api/webhooks/retell",
+    hint: "Configure Retell (retell.ai) webhooks as POST call_ended to this URL.",
+  });
+}
+
 export async function POST(req: Request) {
   const rawBody = await req.text();
   const apiKey = process.env.RETELL_API_KEY?.trim();

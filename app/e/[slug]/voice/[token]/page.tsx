@@ -63,13 +63,13 @@ export default function VoiceAssessmentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <header className="border-b border-[var(--border)] bg-[var(--card)]">
+    <div className="min-h-screen bg-gradient-to-br from-sky-100 via-white to-white text-[var(--foreground)] dark:from-sky-950/30 dark:via-[var(--background)] dark:to-[var(--background)]">
+      <header className="border-b border-[var(--border)]/80 bg-[var(--card)]/80 backdrop-blur-sm dark:bg-[var(--card)]/90">
         <div className="mx-auto max-w-2xl px-4 py-10">
           <div className="flex items-start gap-4">
             <HackMateLogo size={52} className="mt-1 shrink-0 drop-shadow-md" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                 HackMate · Voice assessment
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">{eventTitle}</h1>
@@ -81,13 +81,11 @@ export default function VoiceAssessmentPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-10">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
-          <VoiceCallAgent eventSlug={slug} inviteToken={token} voiceAgentAvailable={voiceAgentAvailable} />
-        </div>
+      <main className="mx-auto max-w-2xl px-4 py-10 pb-16">
+        <VoiceCallAgent eventSlug={slug} inviteToken={token} voiceAgentAvailable={voiceAgentAvailable} />
       </main>
 
-      <footer className="border-t border-[var(--border)] py-6 text-center text-xs text-[var(--muted)]">
+      <footer className="border-t border-[var(--border)]/80 bg-[var(--card)]/40 py-6 text-center text-xs text-[var(--muted)] backdrop-blur-sm dark:bg-transparent">
         Powered by HackMate
       </footer>
     </div>
