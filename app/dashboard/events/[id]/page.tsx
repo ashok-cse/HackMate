@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { syncDashboardHackathonFromEvent } from "@/components/HackathonFilter";
 
 type Ev = {
   id: string;
@@ -39,8 +40,12 @@ export default function EventManagePage() {
   }, [id]);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => void load());
   }, [load]);
+
+  useEffect(() => {
+    if (event?.title) syncDashboardHackathonFromEvent(event.title);
+  }, [event?.title]);
 
   async function saveSettings(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

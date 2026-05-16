@@ -15,7 +15,7 @@ export default function TeamsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => void load());
     const onH = () => void load();
     window.addEventListener("hackmate:hackathon", onH);
     return () => window.removeEventListener("hackmate:hackathon", onH);
@@ -27,7 +27,13 @@ export default function TeamsPage() {
   }
 
   async function finalize() {
-    const hackathonName = getHackathon();
+    const hackathonName = getHackathon().trim();
+    if (!hackathonName) {
+      alert(
+        "Set the hackathon filter first: Dashboard → Events → open your event (Manage syncs its title here).",
+      );
+      return;
+    }
     if (!confirm("Finalize all suggested/locked teams for this hackathon?")) return;
     await fetch("/api/teams/finalize", {
       method: "POST",

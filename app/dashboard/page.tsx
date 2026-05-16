@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { getHackathon } from "@/components/HackathonFilter";
 
@@ -18,6 +19,14 @@ type Stats = {
 
 export default function DashboardHome() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [scopeLabel, setScopeLabel] = useState("");
+
+  useEffect(() => {
+    const sync = () => setScopeLabel(getHackathon());
+    sync();
+    window.addEventListener("hackmate:hackathon", sync);
+    return () => window.removeEventListener("hackmate:hackathon", sync);
+  }, []);
 
   const load = useCallback(async () => {
     const h = encodeURIComponent(getHackathon());
@@ -27,14 +36,20 @@ export default function DashboardHome() {
   }, []);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => void load());
     const onH = () => void load();
     window.addEventListener("hackmate:hackathon", onH);
     return () => window.removeEventListener("hackmate:hackathon", onH);
   }, [load]);
 
   async function campaign(action: "start" | "pause") {
-    const hackathonName = getHackathon();
+    const hackathonName = getHackathon().trim();
+    if (!hackathonName) {
+      alert(
+        "Set the hackathon filter first: Dashboard → Events → open your event (Manage syncs its title here).",
+      );
+      return;
+    }
     const url = action === "start" ? "/api/campaigns/start" : "/api/campaigns/pause";
     const res = await fetch(url, {
       method: "POST",
@@ -47,7 +62,13 @@ export default function DashboardHome() {
   }
 
   async function generateTeams() {
-    const hackathonName = getHackathon();
+    const hackathonName = getHackathon().trim();
+    if (!hackathonName) {
+      alert(
+        "Set the hackathon filter first: Dashboard → Events → open your event (Manage syncs its title here).",
+      );
+      return;
+    }
     const res = await fetch("/api/matching/generate", {
       method: "POST",
       credentials: "include",
@@ -79,6 +100,15 @@ export default function DashboardHome() {
         <p className="mt-1 text-sm text-[var(--muted)]">
           Monitor calling progress, extraction health, and matching output.
         </p>
+        {!scopeLabel ? (
+          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+            No hackathon scoped — numbers include every promoted participant across all events. Go to{" "}
+            <Link href="/dashboard/events" className="underline">
+              Events
+            </Link>{" "}
+            → Manage on an event to sync its title here.
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-3">
