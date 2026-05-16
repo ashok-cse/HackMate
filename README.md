@@ -38,7 +38,7 @@ Edit `.env` (at minimum `DATABASE_URL`). See **Environment** below.
 
 ```bash
 npx prisma db push
-npm run db:seed   # optional
+npm run db:seed   # optional; upserts global app settings only (no demo participants)
 npm run dev
 ```
 
@@ -56,7 +56,6 @@ Copy from **`.env.example`** and adjust.
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string (required). |
 | `HACKMATE_ADMIN_TOKEN` | If set, protects dashboard/API; omit for open local dev. |
-| `NEXT_PUBLIC_DEFAULT_HACKATHON` | UI default filter for hackathon name. |
 | `SLNG_API_KEY`, `SLNG_AGENT_ID`, `SLNG_API_BASE` | Outbound calls via SLNG; without `SLNG_API_KEY`, participants stay queued locally. |
 | `SLNG_WEBHOOK_SECRET` | Validates SLNG call-ended webhooks when set. |
 | `PIONEER_INFERENCE_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID` | Optional transcript extraction. Default URL targets **GLiNER**: `https://api.pioneer.ai/inference` with `X-API-Key` and a model such as `fastino/gliner2-base-v1` ([docs](https://docs.pioneer.ai/api-reference/inference/pioneer)). For **LLM JSON** extraction, use `https://api.pioneer.ai/v1/chat/completions` and a decoder model id. Optional `PIONEER_INFERENCE_THRESHOLD` (0–1). A **custom** HTTPS URL can act as a proxy: `Authorization: Bearer …`, body `{ "transcript" }`, JSON profile response. |
@@ -76,7 +75,7 @@ Root **`Dockerfile`**: Next.js [standalone](https://nextjs.org/docs/app/api-refe
    npx prisma db push
    ```
 
-   Optional: `npm run db:seed` (needs local `tsx`/deps as in local setup).
+   Optional: `npm run db:seed` (minimal: global app settings only; needs local deps as in local setup).
 
 **Local image smoke test**
 
