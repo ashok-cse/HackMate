@@ -1,4 +1,4 @@
-import { participantVoiceMetadata, validE164Phone, type ParticipantVoiceMetaInput } from "@/lib/phone-voice-metadata";
+import { retellLlmDynamicVariables, validE164Phone, type ParticipantVoiceMetaInput } from "@/lib/phone-voice-metadata";
 
 /** Retell AI (https://www.retellai.com/) — phone API host for outbound calls. */
 const RETELL_API = "https://api.retellai.com";
@@ -35,13 +35,6 @@ function retellOverrideAgentId(): string | undefined {
   return cleanEnv(process.env.RETELL_AGENT_ID);
 }
 
-function mergedRetellLlmVariables(participant: ParticipantVoiceMetaInput): Record<string, string> {
-  const base = participantVoiceMetadata(participant);
-  const brief = cleanEnv(process.env.RETELL_LLM_CONTEXT);
-  base.hackmate_brief = brief ? brief.slice(0, 12_000) : "";
-  return base;
-}
-
 export function retellConfigured(): boolean {
   return Boolean(retellApiKey() && retellFromNumber());
 }
@@ -72,8 +65,8 @@ export async function dispatchRetellCall(
     };
   }
 
-  const args = mergedRetellLlmVariables(participant);
-  const metadata: Record<string, string> = { ...args };
+  const llmVars = retellLlmDynamicVariables(participant);
+  const metadata: Record<string, string> = { participant_id: participant.id.trim() };
   const agentOverride = retellOverrideAgentId();
 
   try {
@@ -87,7 +80,7 @@ export async function dispatchRetellCall(
         from_number: fromNumber,
         to_number: phoneNumber,
         metadata,
-        retell_llm_dynamic_variables: args,
+        retell_llm_dynamic_variables: llmVars,
         ...(agentOverride ? { override_agent_id: agentOverride } : {}),
       }),
     });
