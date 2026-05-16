@@ -495,6 +495,35 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
     vadFrameRef.current = requestAnimationFrame(tick);
   }
 
+  const startHandsFreeRef = useRef(startHandsFree);
+  startHandsFreeRef.current = startHandsFree;
+
+  /** After session starts, stay hands-free: each turn begins listening without another mic tap. */
+  useEffect(() => {
+    if (phase !== "ready") return;
+    if (inputMode !== "handsfree") return;
+    if (tapToPlay !== null) return;
+    if (!voiceAgentAvailable) return;
+    if (interviewComplete) return;
+
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      if (phaseRef.current !== "ready") return;
+      if (tapToPlayRef.current) return;
+      const complete = messagesRef.current.some(
+        (m) => m.role === "assistant" && /ASSESSMENT_COMPLETE/i.test(m.content),
+      );
+      if (complete) return;
+      await startHandsFreeRef.current();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, inputMode, tapToPlay, voiceAgentAvailable, interviewComplete]);
+
   async function endListening() {
     if (endingListenRef.current) return;
     endingListenRef.current = true;
@@ -526,14 +555,13 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
     await processRecordingBlob(blob);
   }
 
-  async function onSubmitFinal(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitVoiceProfile(): Promise<boolean> {
     setSubmitErr(null);
     setSubmitOk(null);
-    const transcript = buildTranscript(messages);
+    const transcript = buildTranscript(messagesRef.current);
     if (transcript.length < 12) {
       setSubmitErr("Have a short conversation with the agent first, then submit.");
-      return;
+      return false;
     }
     setSubmitting(true);
     const res = await fetch(
@@ -548,11 +576,31 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
     setSubmitting(false);
     if (!parsed.ok) {
       setSubmitErr(typeof parsed.data.error === "string" ? parsed.data.error : "Submit failed");
-      return;
+      return false;
     }
     setSubmitOk(typeof parsed.data.message === "string" ? parsed.data.message : "Saved.");
     setPhase("done");
+    stopStream();
+    cancelVad();
+    return true;
   }
+
+  const submitVoiceProfileRef = useRef(submitVoiceProfile);
+  submitVoiceProfileRef.current = submitVoiceProfile;
+
+  const autoSubmitAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!interviewComplete || phase !== "ready") return;
+    if (tapToPlay !== null) return;
+    if (submitting) return;
+    const transcript = buildTranscript(messagesRef.current);
+    if (transcript.length < 12) return;
+    if (autoSubmitAttemptedRef.current) return;
+
+    autoSubmitAttemptedRef.current = true;
+    void submitVoiceProfileRef.current();
+  }, [interviewComplete, phase, tapToPlay, submitting, messages]);
 
   const handsfreeMicClickOk =
     (phase === "awaiting_start" && Boolean(greeting?.audioBase64)) ||
@@ -594,11 +642,12 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
   else if (tapToPlay) statusCaption = "Playback needed — tap play reply below";
   else if (phase === "awaiting_start") statusCaption = "Tap to start";
   else if (phase === "listening")
-    statusCaption = inputMode === "hold" ? "Recording — release to send" : "Listening — pause when done";
+    statusCaption = inputMode === "hold" ? "Recording — release to send" : "Listening — pause briefly when done";
   else if (phase === "processing") statusCaption = "Thinking…";
   else if (phase === "speaking") statusCaption = "Agent speaking…";
   else if (phase === "done") statusCaption = "Saved";
-  else if (phase === "ready") statusCaption = inputMode === "hold" ? "Hold to speak" : "Tap to speak";
+  else if (phase === "ready")
+    statusCaption = inputMode === "hold" ? "Hold to speak" : "Hands-free — mic opens automatically";
 
   if (!voiceAgentAvailable) {
     return (
@@ -658,8 +707,10 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
                     ? "Recording — release to send"
                     : "Hold to speak"
                   : phase === "listening"
-                    ? "Listening"
-                    : "Start speaking"
+                    ? "Listening hands-free"
+                    : phase === "speaking"
+                      ? "Interrupt agent"
+                      : "Hands-free session active"
             }
             disabled={inputMode === "handsfree" ? handsfreeMicDisabled : false}
             onClick={() => {
@@ -756,8 +807,9 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
       <details className="mt-4 rounded-xl border border-[var(--border)]/80 bg-[var(--card)]/60 px-4 py-3 text-sm backdrop-blur-sm dark:bg-[var(--card)]/40 [&_summary]:cursor-pointer [&_summary]:font-medium [&_summary]:text-[var(--muted)] [&_summary]:outline-none [&_summary]:focus-visible:ring-2 [&_summary]:focus-visible:ring-sky-400">
         <summary>How this session works</summary>
         <p className="mt-3 leading-relaxed text-[var(--muted)]">
-          Like a phone screen: the agent speaks, then it&apos;s your turn. Pause when finished — we send your speech for
-          transcription. You can interrupt playback by tapping the mic during an answer.
+          After you start, the mic stays hands-free: each time the agent finishes, we listen again automatically.
+          Pause briefly when you&apos;re done talking so we can transcribe. Tap the mic while the agent speaks if you
+          need to interrupt.
         </p>
       </details>
 
@@ -779,25 +831,36 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
 
       {interviewComplete ? (
         <p className="mt-6 text-center text-sm font-medium text-emerald-700 dark:text-emerald-300">
-          Interview complete — submit below so we can run team matching on your answers.
+          Interview complete — saving your voice profile for team matching…
         </p>
       ) : (
         <p className="mt-6 text-center text-xs text-[var(--muted)]">
-          The agent will signal when enough is covered. Submit after a short exchange when you&apos;re ready.
+          Tap once to start (or skip the intro). After that it stays hands-free; we save automatically when the agent
+          wraps up.
         </p>
       )}
 
-      <form onSubmit={(e) => void onSubmitFinal(e)} className="mt-8 space-y-2 border-t border-[var(--border)] pt-6">
-        {submitErr ? <p className="text-sm text-red-600 dark:text-red-400">{submitErr}</p> : null}
-        {submitOk ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{submitOk}</p> : null}
-        <button
-          type="submit"
-          disabled={submitting || phase === "done" || !messages.some((m) => m.role === "user")}
-          className="w-full rounded-full bg-[var(--foreground)] py-3 text-sm font-semibold text-[var(--background)] hover:opacity-90 disabled:opacity-45 sm:w-auto sm:min-w-[12rem] sm:px-8"
-        >
-          {submitting ? "Saving…" : "Submit voice profile"}
-        </button>
-      </form>
+      <div className="mt-8 space-y-3 border-t border-[var(--border)] pt-6">
+        {submitErr ? (
+          <>
+            <p className="text-sm text-red-600 dark:text-red-400">{submitErr}</p>
+            <button
+              type="button"
+              onClick={() => void submitVoiceProfile()}
+              disabled={submitting}
+              className="w-full rounded-full bg-[var(--foreground)] py-3 text-sm font-semibold text-[var(--background)] hover:opacity-90 disabled:opacity-45 sm:w-auto sm:min-w-[12rem] sm:px-8"
+            >
+              {submitting ? "Saving…" : "Try saving again"}
+            </button>
+          </>
+        ) : null}
+        {!submitErr && submitOk ? (
+          <p className="text-sm text-emerald-700 dark:text-emerald-300">{submitOk}</p>
+        ) : null}
+        {!submitErr && interviewComplete && phase !== "done" ? (
+          <p className="text-center text-sm text-[var(--muted)]">Saving…</p>
+        ) : null}
+      </div>
     </div>
   );
 }

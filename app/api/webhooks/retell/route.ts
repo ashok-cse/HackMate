@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractAndStoreParticipantProfile } from "@/lib/participant-voice-ingest";
-import { verifyRetellWebhookSignatureAny } from "@/lib/retell-webhook-verify";
+import { verifyRetellWebhookSignatureAnyDetailed } from "@/lib/retell-webhook-verify";
 import { transcriptToText } from "@/lib/transcript";
 
 export const runtime = "nodejs";
@@ -77,15 +77,30 @@ export async function POST(req: Request) {
 
   if (verifyKeys.length > 0) {
     if (sig) {
-      if (!verifyRetellWebhookSignatureAny(rawBody, verifyKeys, sig)) {
-        return NextResponse.json(
-          {
-            error: "Invalid signature",
-            hint:
-              "Sign with the Retell API key that has the webhook badge (Dashboard → API Keys). Set RETELL_WEBHOOK_VERIFICATION_KEY to that key if RETELL_API_KEY is a different key used only for outbound calls. Server clock must be accurate (within ~5m of Retell). Docs: https://docs.retellai.com/features/secure-webhook",
-          },
-          { status: 401 },
-        );
+      const verified = verifyRetellWebhookSignatureAnyDetailed(rawBody, verifyKeys, sig);
+      if (!verified.ok) {
+        const digestHint =
+          "Use the Retell API key that shows the webhook badge (Dashboard → API Keys). If outbound calls use a different key, set RETELL_WEBHOOK_VERIFICATION_KEY to the webhook-badge key. Docs: https://docs.retellai.com/features/secure-webhook";
+        const body =
+          verified.issue === "timestamp_skew"
+            ? {
+                error: "Signature timestamp outside allowed window",
+                issue: verified.issue,
+                hint:
+                  "Sync server time (NTP) or increase RETELL_WEBHOOK_TS_SKEW_MS (60000–3600000 ms).",
+              }
+            : verified.issue === "malformed"
+              ? {
+                  error: "Invalid X-Retell-Signature header",
+                  issue: verified.issue,
+                  hint: "Expected form v={unix_ms},d={hex}.",
+                }
+              : {
+                  error: "Invalid signature",
+                  issue: verified.issue,
+                  hint: digestHint,
+                };
+        return NextResponse.json(body, { status: 401 });
       }
     } else if (strictUnsigned) {
       return NextResponse.json(

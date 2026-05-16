@@ -20,11 +20,31 @@ export function retellWebhookAllowedSkewMs(): number {
   return Number.isFinite(n) && n >= 60_000 && n <= 60 * 60 * 1000 ? n : DEFAULT_SKEW_MS;
 }
 
+/** Same shape as retell-sdk `symmetric.verify` header parse: v=(\\d+),d=(.*) */
+function parseRetellSignatureHeader(
+  signatureHeader: string,
+): { tsMs: number; digest: string } | null {
+  const m = /^v=(\d+)\s*,\s*d=\s*(.*)$/i.exec(signatureHeader.trim());
+  if (!m) return null;
+  const tsMs = Number.parseInt(m[1]!, 10);
+  const digest = m[2]!.trim().replace(/\s+/g, "");
+  if (
+    !Number.isFinite(tsMs) ||
+    !/^[0-9a-fA-F]+$/.test(digest) ||
+    digest.length === 0 ||
+    digest.length % 2 !== 0
+  ) {
+    return null;
+  }
+  return { tsMs, digest };
+}
+
+export type RetellWebhookSigIssue = "malformed" | "timestamp_skew" | "digest_mismatch";
+
 /**
  * Retell webhook signature: X-Retell-Signature = v={timestamp_ms},d={hex}
- * HMAC-SHA256(rawBody + timestamp_string, api_key) hex === d
+ * HMAC-SHA256(rawBody + timestamp_ms as number, api_key) — see retell-sdk `symmetric.sign`.
  * @see https://docs.retellai.com/features/secure-webhook
- * @see https://github.com/RetellAI/retell-typescript-sdk/blob/main/src/lib/webhook_auth.ts
  */
 export function verifyRetellWebhookSignature(
   rawBody: string,
@@ -32,17 +52,15 @@ export function verifyRetellWebhookSignature(
   signatureHeader: string | null,
 ): boolean {
   if (!signatureHeader || !apiKey) return false;
-  const trimmed = signatureHeader.trim();
-  const m = /^v=(\d+)\s*,\s*d=\s*([0-9a-fA-F]+)\s*$/i.exec(trimmed);
-  if (!m) return false;
-  const timestamp = m[1]!;
-  const digest = m[2]!.trim();
-  const ts = Number.parseInt(timestamp, 10);
-  if (!Number.isFinite(ts)) return false;
+  const parsed = parseRetellSignatureHeader(signatureHeader);
+  if (!parsed) return false;
   const now = Date.now();
-  if (Math.abs(now - ts) > retellWebhookAllowedSkewMs()) return false;
-  const expected = crypto.createHmac("sha256", apiKey).update(rawBody + timestamp).digest("hex");
-  return timingSafeEqualHex(expected, digest);
+  if (Math.abs(now - parsed.tsMs) > retellWebhookAllowedSkewMs()) return false;
+  const expected = crypto
+    .createHmac("sha256", apiKey)
+    .update(rawBody + parsed.tsMs)
+    .digest("hex");
+  return timingSafeEqualHex(expected, parsed.digest);
 }
 
 /** Try each secret until one verifies (webhook-badge key vs generic API key). */
@@ -53,4 +71,27 @@ export function verifyRetellWebhookSignatureAny(
 ): boolean {
   const keys = [...new Set(apiKeys.map((k) => k.trim()).filter(Boolean))];
   return keys.some((k) => verifyRetellWebhookSignature(rawBody, k, signatureHeader));
+}
+
+export function verifyRetellWebhookSignatureAnyDetailed(
+  rawBody: string,
+  apiKeys: readonly string[],
+  signatureHeader: string | null,
+): { ok: true } | { ok: false; issue: RetellWebhookSigIssue } {
+  if (!signatureHeader?.trim()) return { ok: false, issue: "malformed" };
+  const parsed = parseRetellSignatureHeader(signatureHeader);
+  if (!parsed) return { ok: false, issue: "malformed" };
+  const now = Date.now();
+  if (Math.abs(now - parsed.tsMs) > retellWebhookAllowedSkewMs()) {
+    return { ok: false, issue: "timestamp_skew" };
+  }
+  const keys = [...new Set(apiKeys.map((k) => k.trim()).filter(Boolean))];
+  for (const apiKey of keys) {
+    const expected = crypto
+      .createHmac("sha256", apiKey)
+      .update(rawBody + parsed.tsMs)
+      .digest("hex");
+    if (timingSafeEqualHex(expected, parsed.digest)) return { ok: true };
+  }
+  return { ok: false, issue: "digest_mismatch" };
 }
