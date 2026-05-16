@@ -1,22 +1,12 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { ingestParticipantVoiceTranscript } from "@/lib/participant-voice-ingest";
+import { groqConfigured } from "@/lib/groq-voice";
+import { participantForVoiceLink } from "@/lib/voice-assessment-token";
 
 const MAX_TRANSCRIPT = 48_000;
 const MIN_TRANSCRIPT = 12;
 
 export const runtime = "nodejs";
-
-async function participantForVoiceLink(slug: string, token: string) {
-  const participant = await prisma.participant.findFirst({
-    where: { voiceInviteToken: token.trim() },
-    include: { event: true },
-  });
-  if (!participant?.event || participant.event.slug !== slug) {
-    return null;
-  }
-  return participant;
-}
 
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; token: string }> }) {
   const { slug, token } = await ctx.params;
@@ -27,6 +17,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
   return NextResponse.json({
     ok: true,
     eventTitle: participant.event!.title,
+    voiceAgentAvailable: groqConfigured(),
   });
 }
 

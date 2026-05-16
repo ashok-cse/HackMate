@@ -1,7 +1,7 @@
 "use client";
 
+import { VoiceCallAgent } from "@/components/VoiceCallAgent";
 import { HackMateLogo } from "@/components/HackMateLogo";
-import { WebVoiceProfileForm } from "@/components/WebVoiceProfileForm";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -10,6 +10,7 @@ export default function VoiceAssessmentPage() {
   const slug = String(params.slug ?? "");
   const token = String(params.token ?? "");
   const [eventTitle, setEventTitle] = useState<string | null>(null);
+  const [voiceAgentAvailable, setVoiceAgentAvailable] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,10 +29,12 @@ export default function VoiceAssessmentPage() {
       if (!res.ok) {
         setLoadError(data.error ?? "This link is invalid or expired.");
         setEventTitle(null);
+        setVoiceAgentAvailable(false);
         setLoading(false);
         return;
       }
       setEventTitle(data.eventTitle ?? "Event");
+      setVoiceAgentAvailable(Boolean(data.voiceAgentAvailable));
       setLoading(false);
     })();
     return () => {
@@ -71,7 +74,7 @@ export default function VoiceAssessmentPage() {
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">{eventTitle}</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">
-                Complete your voice profile for team matching — same process as our phone interviews.
+                Talk with our voice agent for team matching — same information we collect on a phone interview.
               </p>
             </div>
           </div>
@@ -80,7 +83,7 @@ export default function VoiceAssessmentPage() {
 
       <main className="mx-auto max-w-2xl px-4 py-10">
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
-          <WebVoiceProfileForm eventSlug={slug} inviteToken={token} bare />
+          <VoiceCallAgent eventSlug={slug} inviteToken={token} voiceAgentAvailable={voiceAgentAvailable} />
         </div>
       </main>
 
