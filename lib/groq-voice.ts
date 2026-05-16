@@ -48,11 +48,16 @@ export async function groqTranscribe(audio: Buffer, filename: string): Promise<s
   return (data.text ?? "").trim();
 }
 
+/** Groq /audio/speech (Orpheus) returns 400 if response_format is not wav. */
+const GROQ_TTS_RESPONSE_FORMATS = new Set(["wav"]);
+
 export async function groqSpeech(text: string): Promise<{ buffer: Buffer; contentType: string }> {
   const key = apiKey();
   const model = process.env.GROQ_TTS_MODEL?.trim() || "canopylabs/orpheus-v1-english";
   const voice = process.env.GROQ_TTS_VOICE?.trim() || "hannah";
-  const responseFormat = process.env.GROQ_TTS_FORMAT?.trim() || "mp3";
+  const fromEnv = process.env.GROQ_TTS_FORMAT?.trim().toLowerCase();
+  const responseFormat =
+    fromEnv && GROQ_TTS_RESPONSE_FORMATS.has(fromEnv) ? fromEnv : "wav";
 
   const trimmed = text.trim().slice(0, 4000);
   if (!trimmed) throw new Error("Empty TTS text");
