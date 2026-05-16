@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { setHackathonCampaignPaused } from "@/lib/hackathon-campaign";
+import { hackmateServerLog } from "@/lib/server-log";
 import { dispatchSlngCall, slngConfigured } from "@/lib/slng";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   const denied = requireAdmin(req);
@@ -11,12 +14,15 @@ export async function POST(req: Request) {
   const body = (await req.json()) as { hackathonName?: string };
   const hackathonName = body.hackathonName?.trim();
   if (!hackathonName) {
-    console.warn("[hackmate:campaigns:start] Missing hackathonName");
+    hackmateServerLog("hackmate:campaigns:start", "Missing hackathonName", {}, "warn");
     return NextResponse.json({ error: "hackathonName required" }, { status: 400 });
   }
 
   const slngReady = slngConfigured();
-  console.info("[hackmate:campaigns:start] Begin", { hackathonName, slngConfigured: slngReady });
+  hackmateServerLog("hackmate:campaigns:start", "Begin", {
+    hackathonName,
+    slngConfigured: slngReady,
+  });
 
   await setHackathonCampaignPaused(prisma, hackathonName, false);
 
@@ -34,7 +40,7 @@ export async function POST(req: Request) {
       data: { callStatus: "queued" },
     });
 
-    console.info("[hackmate:campaigns:start] Queued locally (SLNG not configured)", {
+    hackmateServerLog("hackmate:campaigns:start", "Queued locally (SLNG not configured)", {
       hackathonName,
       updated: result.count,
     });
@@ -51,7 +57,7 @@ export async function POST(req: Request) {
     where,
   });
 
-  console.info("[hackmate:campaigns:start] Dispatching SLNG", {
+  hackmateServerLog("hackmate:campaigns:start", "Dispatching SLNG", {
     hackathonName,
     batchSize: participants.length,
   });
@@ -84,12 +90,17 @@ export async function POST(req: Request) {
       ]);
       dispatched++;
     } else {
-      console.warn("[hackmate:campaigns:start] Dispatch failed", {
-        participantId: participant.id,
-        reason: result.reason,
-        message: result.message,
-        httpStatus: "status" in result ? result.status : undefined,
-      });
+      hackmateServerLog(
+        "hackmate:campaigns:start",
+        "Dispatch failed",
+        {
+          participantId: participant.id,
+          reason: result.reason,
+          message: result.message,
+          httpStatus: "status" in result ? result.status : undefined,
+        },
+        "warn",
+      );
       await prisma.$transaction([
         prisma.call.create({
           data: {
@@ -108,7 +119,7 @@ export async function POST(req: Request) {
     }
   }
 
-  console.info("[hackmate:campaigns:start] Done", {
+  hackmateServerLog("hackmate:campaigns:start", "Done", {
     hackathonName,
     batchSize: participants.length,
     dispatched,
