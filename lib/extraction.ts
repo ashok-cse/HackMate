@@ -227,6 +227,11 @@ function parseJsonLoose(raw: string): unknown {
   return JSON.parse(inner) as unknown;
 }
 
+function trimEnv(value: string | undefined): string | undefined {
+  const t = value?.trim();
+  return t === "" ? undefined : t;
+}
+
 async function extractViaPioneerOpenAi(
   transcript: string,
   fallbackName: string,
@@ -270,10 +275,10 @@ export async function extractProfileFromTranscript(
   transcript: string,
   fallbackName: string,
 ): Promise<ExtractedProfile> {
-  const url = process.env.PIONEER_INFERENCE_URL;
-  const key = process.env.PIONEER_API_KEY;
+  const url = trimEnv(process.env.PIONEER_INFERENCE_URL);
+  const key = trimEnv(process.env.PIONEER_API_KEY);
   if (url && key) {
-    const modelId = process.env.PIONEER_MODEL_ID;
+    const modelId = trimEnv(process.env.PIONEER_MODEL_ID);
     if (modelId && isPioneerNativeInferenceUrl(url)) {
       try {
         const partial = await extractViaGlinerNative(transcript, fallbackName, url, key, modelId);
@@ -282,6 +287,22 @@ export async function extractProfileFromTranscript(
         }
       } catch {
         // fall through
+      }
+      const decoderModelId = trimEnv(process.env.PIONEER_DECODER_MODEL_ID);
+      if (decoderModelId) {
+        const chatUrl = "https://api.pioneer.ai/v1/chat/completions";
+        try {
+          const data = await extractViaPioneerOpenAi(
+            transcript,
+            fallbackName,
+            chatUrl,
+            key,
+            decoderModelId,
+          );
+          if (data) return normalizeExtracted(data, fallbackName, transcript);
+        } catch {
+          // fall through
+        }
       }
     }
     if (modelId && isPioneerChatCompletionsUrl(url)) {
@@ -292,21 +313,25 @@ export async function extractProfileFromTranscript(
         // fall through
       }
     }
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({ transcript }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as Partial<ExtractedProfile>;
-        return normalizeExtracted(data, fallbackName, transcript);
+    const customProxy =
+      !isPioneerNativeInferenceUrl(url) && !isPioneerChatCompletionsUrl(url);
+    if (customProxy) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({ transcript }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as Partial<ExtractedProfile>;
+          return normalizeExtracted(data, fallbackName, transcript);
+        }
+      } catch {
+        // fall through to local extractor
       }
-    } catch {
-      // fall through to local extractor
     }
   }
   return heuristicExtract(transcript, fallbackName);
@@ -417,6 +442,7 @@ function heuristicExtract(transcript: string, fallbackName: string): ExtractedPr
     existing_team_status,
     confidence_score: confidence,
     missing_fields: missing,
-    extraction_notes: "Local heuristic extractor (set PIONEER_INFERENCE_URL for live Pioneer).",
+    extraction_notes:
+      "Local heuristic — set PIONEER_API_KEY and URL; for call transcripts prefer https://api.pioneer.ai/v1/chat/completions + decoder model, or PIONEER_DECODER_MODEL_ID with /inference.",
   };
 }
