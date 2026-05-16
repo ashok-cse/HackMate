@@ -1,20 +1,5 @@
-import type { Participant } from "@prisma/client";
 import { dispatchRetellCall, retellConfigured } from "@/lib/retell";
-
-type CallParticipant = Pick<
-  Participant,
-  | "id"
-  | "externalRegistrationId"
-  | "fullName"
-  | "email"
-  | "phone"
-  | "city"
-  | "hackathonName"
-  | "universityOrCompany"
-  | "registrationType"
-  | "knownSkills"
-  | "existingTeamName"
->;
+import type { ParticipantVoiceMetaInput } from "@/lib/phone-voice-metadata";
 
 export type OutboundPhoneProvider = "retell";
 
@@ -44,7 +29,7 @@ export function outboundPhoneConfigured(): boolean {
 }
 
 export async function dispatchOutboundPhone(
-  participant: CallParticipant,
+  participant: ParticipantVoiceMetaInput,
 ): Promise<OutboundPhoneDispatchResult> {
   if (!retellConfigured()) {
     return {

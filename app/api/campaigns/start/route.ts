@@ -61,6 +61,18 @@ export async function POST(req: Request) {
 
   const participants = await prisma.participant.findMany({
     where,
+    include: {
+      event: {
+        select: {
+          slug: true,
+          title: true,
+          description: true,
+          locationSummary: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      },
+    },
   });
 
   hackmateServerLog("hackmate:campaigns:start", "Dispatching outbound calls", {

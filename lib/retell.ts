@@ -1,5 +1,4 @@
-import type { Participant } from "@prisma/client";
-import { participantVoiceMetadata, validE164Phone } from "@/lib/phone-voice-metadata";
+import { participantVoiceMetadata, validE164Phone, type ParticipantVoiceMetaInput } from "@/lib/phone-voice-metadata";
 
 /** Retell AI (https://www.retellai.com/) — phone API host for outbound calls. */
 const RETELL_API = "https://api.retellai.com";
@@ -17,21 +16,6 @@ export type RetellDispatchResult =
       status?: number;
       detail?: string;
     };
-
-type CallParticipant = Pick<
-  Participant,
-  | "id"
-  | "externalRegistrationId"
-  | "fullName"
-  | "email"
-  | "phone"
-  | "city"
-  | "hackathonName"
-  | "universityOrCompany"
-  | "registrationType"
-  | "knownSkills"
-  | "existingTeamName"
->;
 
 function cleanEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -51,10 +35,10 @@ function retellOverrideAgentId(): string | undefined {
   return cleanEnv(process.env.RETELL_AGENT_ID);
 }
 
-function mergedRetellLlmVariables(participant: CallParticipant): Record<string, string> {
+function mergedRetellLlmVariables(participant: ParticipantVoiceMetaInput): Record<string, string> {
   const base = participantVoiceMetadata(participant);
   const brief = cleanEnv(process.env.RETELL_LLM_CONTEXT);
-  if (brief) base.hackmate_brief = brief.slice(0, 12_000);
+  base.hackmate_brief = brief ? brief.slice(0, 12_000) : "";
   return base;
 }
 
@@ -67,7 +51,7 @@ export function validRetellPhone(phone: string): boolean {
 }
 
 export async function dispatchRetellCall(
-  participant: CallParticipant,
+  participant: ParticipantVoiceMetaInput,
 ): Promise<RetellDispatchResult> {
   const apiKey = retellApiKey();
   const fromNumber = retellFromNumber();

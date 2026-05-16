@@ -9,7 +9,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (denied) return denied;
   const { id } = await ctx.params;
 
-  const participant = await prisma.participant.findUnique({ where: { id } });
+  const participant = await prisma.participant.findUnique({
+    where: { id },
+    include: {
+      event: {
+        select: {
+          slug: true,
+          title: true,
+          description: true,
+          locationSummary: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      },
+    },
+  });
   if (!participant) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (!participant.consentToCall) {
