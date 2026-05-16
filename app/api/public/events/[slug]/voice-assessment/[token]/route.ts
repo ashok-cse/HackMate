@@ -63,6 +63,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     profileStatus: "profileStatus" in result ? result.profileStatus : undefined,
     skippedExtraction: "skippedExtraction" in result ? result.skippedExtraction : false,
     emptyTranscript: "emptyTranscript" in result ? result.emptyTranscript : false,
-    message: "Thanks — your voice assessment was saved. We’ll use it for team matching, same as a phone interview.",
+    message:
+      "Thanks — your voice assessment was saved. We’ll use it for team matching along with our other screening channels.",
   });
 }

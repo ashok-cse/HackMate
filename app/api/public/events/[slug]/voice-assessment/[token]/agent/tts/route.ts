@@ -6,10 +6,14 @@ export const runtime = "nodejs";
 export const maxDuration = 90;
 
 function stripCompleteTokenForSpeech(text: string): string {
-  return text
-    .replace(/\s*ASSESSMENT_COMPLETE\s*$/im, "")
-    .trim()
-    .slice(0, 4000);
+  const t = text.trimEnd();
+  const lines = t.split(/\r?\n/);
+  const last = lines[lines.length - 1]?.trim() ?? "";
+  const out =
+    /^ASSESSMENT_COMPLETE$/i.test(last) && lines.length > 0
+      ? lines.slice(0, -1).join("\n").trim()
+      : text.trim();
+  return out.slice(0, 4000);
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; token: string }> }) {

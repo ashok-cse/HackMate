@@ -56,7 +56,7 @@ export async function sendParticipantPromotedEmail(payload: ParticipantPromotedE
 <body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111">
   <p>Hi ${escapeHtml(firstName)},</p>
   <p>You’ve been added to the <strong>participant</strong> list for <strong>${escapeHtml(payload.eventTitle)}</strong>.</p>
-  <p>Please complete a short <strong>voice assessment</strong> in your browser (or type your answers). We use the same pipeline as our phone interviews to extract skills and team-fit for matching.</p>
+  <p>Please complete a short <strong>voice assessment</strong> in your browser (or type your answers). We use the same pipeline as phone-based screenings to extract skills and team-fit for matching.</p>
   ${ctaBlock}
   <p style="margin-top:1.25rem;color:#666;font-size:0.9em">— HackMate</p>
 </body>

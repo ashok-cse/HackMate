@@ -74,7 +74,8 @@ export default function VoiceAssessmentPage() {
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">{eventTitle}</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">
-                Talk with our voice agent for team matching — same information we collect on a phone interview.
+                Talk with our voice agent for team matching — same information we collect in our other screening
+                channels.
               </p>
             </div>
           </div>

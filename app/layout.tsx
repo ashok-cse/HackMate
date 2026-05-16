@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "HackMate · Hackathon voice matching",
-  description: "Voice interviews, structured profiles, and balanced team suggestions.",
+  description: "Voice assessments, structured profiles, and balanced team suggestions.",
   icons: {
     icon: [{ url: "/hackmate-logo.svg", type: "image/svg+xml" }],
     apple: "/hackmate-logo.svg",

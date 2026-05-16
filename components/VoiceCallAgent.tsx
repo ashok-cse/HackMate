@@ -14,7 +14,7 @@ type GreetingPayload = { mimeType: string; audioBase64: string };
 
 type InputMode = "handsfree" | "hold";
 
-const VAD_SILENCE_MS = 950;
+const VAD_SILENCE_MS = 1450;
 const VAD_MIN_SPEECH_MS = 650;
 const VAD_RMS_THRESHOLD = 0.018;
 const VAD_MAX_RECORD_MS = 50_000;
@@ -38,8 +38,18 @@ function isPlaybackDenied(e: unknown): boolean {
   return false;
 }
 
+/** Closing token must be alone on the final line (model instructions). */
+function lastLineIsCompleteToken(s: string): boolean {
+  const lines = s.trimEnd().split(/\r?\n/);
+  const last = lines[lines.length - 1]?.trim() ?? "";
+  return /^ASSESSMENT_COMPLETE$/i.test(last);
+}
+
 function stripComplete(s: string): string {
-  return s.replace(/\s*ASSESSMENT_COMPLETE\s*$/im, "").trim();
+  if (!lastLineIsCompleteToken(s)) return s.trim();
+  const lines = s.trimEnd().split(/\r?\n/);
+  lines.pop();
+  return lines.join("\n").trim();
 }
 
 function buildTranscript(messages: ChatMessage[]): string {
@@ -104,7 +114,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
   const [inputMode, setInputMode] = useState<InputMode>("handsfree");
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [conversationOpen, setConversationOpen] = useState(false);
-  const interviewComplete = messages.some((m) => m.role === "assistant" && /ASSESSMENT_COMPLETE/i.test(m.content));
+  const assessmentComplete = messages.some((m) => m.role === "assistant" && lastLineIsCompleteToken(m.content));
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -504,7 +514,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
     if (inputMode !== "handsfree") return;
     if (tapToPlay !== null) return;
     if (!voiceAgentAvailable) return;
-    if (interviewComplete) return;
+    if (assessmentComplete) return;
 
     let cancelled = false;
     void (async () => {
@@ -513,7 +523,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
       if (phaseRef.current !== "ready") return;
       if (tapToPlayRef.current) return;
       const complete = messagesRef.current.some(
-        (m) => m.role === "assistant" && /ASSESSMENT_COMPLETE/i.test(m.content),
+        (m) => m.role === "assistant" && lastLineIsCompleteToken(m.content),
       );
       if (complete) return;
       await startHandsFreeRef.current();
@@ -522,7 +532,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
     return () => {
       cancelled = true;
     };
-  }, [phase, inputMode, tapToPlay, voiceAgentAvailable, interviewComplete]);
+  }, [phase, inputMode, tapToPlay, voiceAgentAvailable, assessmentComplete]);
 
   async function endListening() {
     if (endingListenRef.current) return;
@@ -591,7 +601,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
   const autoSubmitAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (!interviewComplete || phase !== "ready") return;
+    if (!assessmentComplete || phase !== "ready") return;
     if (tapToPlay !== null) return;
     if (submitting) return;
     const transcript = buildTranscript(messagesRef.current);
@@ -600,7 +610,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
 
     autoSubmitAttemptedRef.current = true;
     void submitVoiceProfileRef.current();
-  }, [interviewComplete, phase, tapToPlay, submitting, messages]);
+  }, [assessmentComplete, phase, tapToPlay, submitting, messages]);
 
   const handsfreeMicClickOk =
     (phase === "awaiting_start" && Boolean(greeting?.audioBase64)) ||
@@ -829,9 +839,9 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
         </div>
       ) : null}
 
-      {interviewComplete ? (
+      {assessmentComplete ? (
         <p className="mt-6 text-center text-sm font-medium text-emerald-700 dark:text-emerald-300">
-          Interview complete — saving your voice profile for team matching…
+          Assessment complete — saving your voice profile for team matching…
         </p>
       ) : (
         <p className="mt-6 text-center text-xs text-[var(--muted)]">
@@ -857,7 +867,7 @@ export function VoiceCallAgent({ eventSlug, inviteToken, voiceAgentAvailable }: 
         {!submitErr && submitOk ? (
           <p className="text-sm text-emerald-700 dark:text-emerald-300">{submitOk}</p>
         ) : null}
-        {!submitErr && interviewComplete && phase !== "done" ? (
+        {!submitErr && assessmentComplete && phase !== "done" ? (
           <p className="text-center text-sm text-[var(--muted)]">Saving…</p>
         ) : null}
       </div>
