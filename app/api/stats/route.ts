@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hackmateServerLog } from "@/lib/server-log";
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const denied = requireAdmin(req);
@@ -62,6 +65,20 @@ export async function GET(req: Request) {
   ]);
 
   const campaignPaused = hackathon ? (campaignSettingsRow?.campaignPaused ?? false) : false;
+
+  hackmateServerLog("hackmate:stats", "Snapshot", {
+    hackathonScope: hackathon ?? "(all hackathons)",
+    totalParticipants,
+    callsCompleted,
+    callsPending,
+    noAnswer,
+    consentDeclined,
+    profilesReady: profilesExtracted,
+    needsManualReview: needsManual,
+    suggestedTeams: teamsGenerated,
+    unmatchedPostCall: unmatchedParticipants,
+    campaignPaused,
+  });
 
   return NextResponse.json({
     totalParticipants,

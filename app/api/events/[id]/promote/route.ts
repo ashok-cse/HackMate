@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hackmateServerLog } from "@/lib/server-log";
+
+export const runtime = "nodejs";
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = requireAdmin(_req);
@@ -12,6 +15,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const pending = await prisma.eventRegistration.findMany({
     where: { eventId: id, promotedParticipantId: null },
+  });
+
+  hackmateServerLog("hackmate:promote", "Begin", {
+    eventId: id,
+    eventTitle: event.title,
+    pendingRegistrationCount: pending.length,
   });
 
   let promoted = 0;
@@ -57,6 +66,15 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const unpromotedRemaining = await prisma.eventRegistration.count({
     where: { eventId: id, promotedParticipantId: null },
+  });
+
+  hackmateServerLog("hackmate:promote", "Done", {
+    eventId: id,
+    eventTitle: event.title,
+    promoted,
+    skippedDuplicateEmail,
+    skippedNoConsent,
+    unpromotedRemaining,
   });
 
   return NextResponse.json({
