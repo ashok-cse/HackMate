@@ -50,7 +50,7 @@ export default function LoginInner() {
               value={token}
               onChange={(e) => setToken(e.target.value)}
               autoComplete="off"
-              placeholder="HACKMATE_ADMIN_TOKEN"
+              placeholder="Type 'admin' to login"
               required
             />
           </label>
