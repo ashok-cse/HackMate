@@ -6,6 +6,8 @@ import { transcriptToText } from "@/lib/transcript";
 
 export const runtime = "nodejs";
 
+const LOG = "[retell-webhook]";
+
 type RetellCallPayload = {
   call_id?: string;
   call_status?: string;
@@ -62,7 +64,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const rawBody = await req.text();
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch (e) {
+    console.error(LOG, "read_body_failed", e);
+    return NextResponse.json({ error: "Failed to read body" }, { status: 400 });
+  }
+
   const verifyKeys = [
     ...new Set(
       [process.env.RETELL_WEBHOOK_VERIFICATION_KEY, process.env.RETELL_API_KEY]
@@ -100,15 +109,22 @@ export async function POST(req: Request) {
                   issue: verified.issue,
                   hint: digestHint,
                 };
+        console.error(LOG, "signature_verification_failed", verified.issue);
         return NextResponse.json(body, { status: 401 });
       }
     } else if (strictUnsigned) {
+      console.error(LOG, "missing_signature_strict_mode");
       return NextResponse.json(
         { error: "Missing X-Retell-Signature" },
         { status: 401 },
       );
     } else {
       /* Retell “Test webhook” often omits the signature; live deliveries include it. */
+      console.warn(
+        LOG,
+        "post_without_signature_short_circuit",
+        "Verify keys are set but no X-Retell-Signature; returning 204 without processing (Retell Test Webhook). Live calls include the header.",
+      );
       return new NextResponse(null, { status: 204 });
     }
   }
@@ -117,6 +133,7 @@ export async function POST(req: Request) {
   try {
     body = JSON.parse(rawBody) as WebhookBody;
   } catch {
+    console.error(LOG, "invalid_json");
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -127,19 +144,31 @@ export async function POST(req: Request) {
 
   const call = body.call;
   if (!call) {
+    console.error(LOG, "call_ended_missing_call_object");
     return NextResponse.json({ error: "call required" }, { status: 400 });
   }
 
   const participantId = participantIdFromCall(call);
   if (!participantId) {
+    console.error(LOG, "participant_id_missing", {
+      call_id: call.call_id ?? null,
+    });
     return NextResponse.json(
       { error: "participant_id missing from call metadata or dynamic variables" },
       { status: 400 },
     );
   }
 
-  const participant = await prisma.participant.findUnique({ where: { id: participantId } });
+  let participant;
+  try {
+    participant = await prisma.participant.findUnique({ where: { id: participantId } });
+  } catch (e) {
+    console.error(LOG, "participant_lookup_failed", participantId, e);
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  }
+
   if (!participant) {
+    console.error(LOG, "participant_not_found", participantId);
     return NextResponse.json({ error: "participant not found" }, { status: 404 });
   }
 
@@ -190,49 +219,61 @@ export async function POST(req: Request) {
     rawPayload: body as object,
   };
 
-  const existingCall = providerCallId
-    ? await prisma.call.findFirst({
-        where: { participantId, provider: "retell", providerCallId },
-        orderBy: { createdAt: "desc" },
-      })
-    : null;
+  try {
+    const existingCall = providerCallId
+      ? await prisma.call.findFirst({
+          where: { participantId, provider: "retell", providerCallId },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
 
-  if (existingCall) {
-    await prisma.call.update({
-      where: { id: existingCall.id },
-      data: callData,
-    });
-  } else {
-    await prisma.call.create({ data: callData });
-  }
+    if (existingCall) {
+      await prisma.call.update({
+        where: { id: existingCall.id },
+        data: callData,
+      });
+    } else {
+      await prisma.call.create({ data: callData });
+    }
 
-  await prisma.participant.update({
-    where: { id: participantId },
-    data: { callStatus },
-  });
-
-  if (!consentGiven || callStatus === "consent_declined") {
-    return new NextResponse(null, { status: 204 });
-  }
-
-  if (!transcriptText.trim()) {
     await prisma.participant.update({
       where: { id: participantId },
-      data: { profileStatus: "needs_manual_review" },
+      data: { callStatus },
     });
-    return new NextResponse(null, { status: 204 });
-  }
 
-  const extractResult = await extractAndStoreParticipantProfile(
-    participantId,
-    transcriptText,
-    participant.fullName,
-  );
-  if ("emptyTranscript" in extractResult) {
-    await prisma.participant.update({
-      where: { id: participantId },
-      data: { profileStatus: "needs_manual_review" },
-    });
+    if (!consentGiven || callStatus === "consent_declined") {
+      console.warn(LOG, "call_ended_skipped_extraction", {
+        participantId,
+        callStatus,
+        consentGiven,
+      });
+      return new NextResponse(null, { status: 204 });
+    }
+
+    if (!transcriptText.trim()) {
+      await prisma.participant.update({
+        where: { id: participantId },
+        data: { profileStatus: "needs_manual_review" },
+      });
+      console.warn(LOG, "empty_transcript_needs_manual_review", { participantId });
+      return new NextResponse(null, { status: 204 });
+    }
+
+    const extractResult = await extractAndStoreParticipantProfile(
+      participantId,
+      transcriptText,
+      participant.fullName,
+    );
+    if ("emptyTranscript" in extractResult) {
+      await prisma.participant.update({
+        where: { id: participantId },
+        data: { profileStatus: "needs_manual_review" },
+      });
+      console.warn(LOG, "extract_returned_empty_transcript", { participantId });
+    }
+  } catch (e) {
+    console.error(LOG, "persist_or_extract_failed", { participantId, providerCallId }, e);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return new NextResponse(null, { status: 204 });
