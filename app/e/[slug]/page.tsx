@@ -36,6 +36,11 @@ export default function PublicEventPage() {
     })();
   }, [slug]);
 
+  useEffect(() => {
+    setDone(null);
+    setError(null);
+  }, [slug]);
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -114,7 +119,25 @@ export default function PublicEventPage() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-10">
-        {!event.registrationOpen ? (
+        {done ? (
+          <div className="rounded-2xl border border-emerald-500/30 bg-[var(--card)] px-8 py-14 text-center shadow-sm shadow-emerald-950/5">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 ring-2 ring-emerald-500/35">
+              <svg
+                className="h-8 w-8 text-emerald-600 dark:text-emerald-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-semibold tracking-tight">You&apos;re signed up</h2>
+            <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-[var(--muted)]">{done}</p>
+            <p className="mt-8 text-sm font-medium text-[var(--foreground)]">{event.title}</p>
+          </div>
+        ) : !event.registrationOpen ? (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
             Registration is closed for this event.
           </div>
@@ -194,7 +217,6 @@ export default function PublicEventPage() {
             </label>
 
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            {done ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{done}</p> : null}
 
             <button
               type="submit"
