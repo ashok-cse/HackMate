@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
-  const hackathon = searchParams.get("hackathon") ?? undefined;
+  const hackathon = searchParams.get("hackathon")?.trim() || undefined;
 
   const whereHack = hackathon ? { hackathonName: hackathon } : {};
 
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     needsManual,
     teamsGenerated,
     unmatchedParticipants,
-    settings,
+    campaignSettingsRow,
   ] = await Promise.all([
     prisma.participant.count({ where: whereHack }),
     prisma.participant.count({
@@ -56,8 +56,12 @@ export async function GET(req: Request) {
         callStatus: "completed",
       },
     }),
-    prisma.appSettings.findUnique({ where: { id: "global" } }),
+    hackathon
+      ? prisma.hackathonCampaignSettings.findUnique({ where: { hackathonName: hackathon } })
+      : Promise.resolve(null),
   ]);
+
+  const campaignPaused = hackathon ? (campaignSettingsRow?.campaignPaused ?? false) : false;
 
   return NextResponse.json({
     totalParticipants,
@@ -69,6 +73,6 @@ export async function GET(req: Request) {
     needsManual,
     teamsGenerated,
     unmatchedParticipants,
-    campaignPaused: settings?.campaignPaused ?? false,
+    campaignPaused,
   });
 }

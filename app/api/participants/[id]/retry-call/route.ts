@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isHackathonCampaignPaused } from "@/lib/hackathon-campaign";
 import { dispatchSlngCall, slngConfigured } from "@/lib/slng";
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -15,9 +16,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Participant did not consent to calls" }, { status: 400 });
   }
 
-  const settings = await prisma.appSettings.findUnique({ where: { id: "global" } });
-  if (settings?.campaignPaused) {
-    return NextResponse.json({ error: "Campaign is paused" }, { status: 400 });
+  if (await isHackathonCampaignPaused(prisma, participant.hackathonName)) {
+    return NextResponse.json(
+      { error: "Campaign is paused for this hackathon" },
+      { status: 400 },
+    );
   }
 
   if (!slngConfigured()) {

@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { setHackathonCampaignPaused } from "@/lib/hackathon-campaign";
 
 export async function POST(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
 
-  await prisma.appSettings.upsert({
-    where: { id: "global" },
-    create: { id: "global", campaignPaused: true },
-    update: { campaignPaused: true },
-  });
+  const body = (await req.json()) as { hackathonName?: string };
+  const hackathonName = body.hackathonName?.trim();
+  if (!hackathonName) {
+    return NextResponse.json({ error: "hackathonName required" }, { status: 400 });
+  }
 
-  return NextResponse.json({ ok: true, paused: true });
+  await setHackathonCampaignPaused(prisma, hackathonName, true);
+
+  return NextResponse.json({ ok: true, paused: true, hackathonName });
 }

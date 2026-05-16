@@ -8,9 +8,17 @@ datasource db {
 }
 
 model AppSettings {
-  id             String   @id @default("global")
+  id        String   @id @default("global")
+  updatedAt DateTime @updatedAt
+}
+
+/** Outbound-call pause flag scoped by `Participant.hackathonName` (usually an event title). */
+model HackathonCampaignSettings {
+  hackathonName  String   @id
   campaignPaused Boolean  @default(false)
   updatedAt      DateTime @updatedAt
+
+  @@map("hackathon_campaign_settings")
 }
 
 model Event {

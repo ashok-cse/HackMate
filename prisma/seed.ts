@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   await prisma.appSettings.upsert({
     where: { id: "global" },
-    create: { id: "global", campaignPaused: false },
+    create: { id: "global" },
     update: {},
   });
 

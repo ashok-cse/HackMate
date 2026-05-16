@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { setHackathonCampaignPaused } from "@/lib/hackathon-campaign";
 import { dispatchSlngCall, slngConfigured } from "@/lib/slng";
 
 export async function POST(req: Request) {
@@ -13,11 +14,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "hackathonName required" }, { status: 400 });
   }
 
-  await prisma.appSettings.upsert({
-    where: { id: "global" },
-    create: { id: "global", campaignPaused: false },
-    update: { campaignPaused: false },
-  });
+  await setHackathonCampaignPaused(prisma, hackathonName, false);
 
   const where = {
     hackathonName,

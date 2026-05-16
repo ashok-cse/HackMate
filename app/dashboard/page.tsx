@@ -135,8 +135,11 @@ export default function DashboardHome() {
         </button>
       </div>
 
-      {stats?.campaignPaused ? (
-        <p className="text-sm text-amber-600">Campaign is paused — outbound queue should stop.</p>
+      {scopeLabel && stats?.campaignPaused ? (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          Campaign is paused for this hackathon — outbound batch and manual retry are blocked until you
+          start the campaign again.
+        </p>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -14,12 +14,18 @@ type Row = {
 
 export default function EventsListPage() {
   const [events, setEvents] = useState<Row[]>([]);
+  /** Full base URL for public links (`window.location.origin` after mount). */
+  const [publicBase, setPublicBase] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/events", { credentials: "include" });
     if (!res.ok) return;
     const data = await res.json();
     setEvents(data.events);
+  }, []);
+
+  useEffect(() => {
+    setPublicBase(window.location.origin);
   }, []);
 
   useEffect(() => {
@@ -57,11 +63,19 @@ export default function EventsListPage() {
           <tbody>
             {events.map((ev) => {
               const path = `/e/${ev.slug}`;
+              const href = publicBase ? `${publicBase}${path}` : path;
               return (
                 <tr key={ev.id} className="border-t border-[var(--border)]">
                   <td className="px-3 py-2 font-medium">{ev.title}</td>
                   <td className="px-3 py-2">
-                    <code className="text-xs text-[var(--muted)]">{path}</code>
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-emerald-700 underline decoration-emerald-700/40 underline-offset-2 hover:decoration-emerald-700 dark:text-emerald-300 dark:decoration-emerald-300/40 dark:hover:decoration-emerald-300"
+                    >
+                      {href}
+                    </a>
                   </td>
                   <td className="px-3 py-2 tabular-nums">{ev.registrationCount}</td>
                   <td className="px-3 py-2">
