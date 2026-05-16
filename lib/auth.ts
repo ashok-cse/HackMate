@@ -17,6 +17,13 @@ export function requireAdmin(req: Request): Response | null {
   const token = match ? decodeURIComponent(match[1]) : undefined;
   if (token === expected) return null;
 
+  const path = new URL(req.url).pathname;
+  console.warn("[hackmate:auth] Unauthorized", {
+    path,
+    hasBearer: Boolean(auth?.startsWith("Bearer ")),
+    hasHackmateCookie: /(?:^|;\s*)hackmate_token=/.test(cookie),
+  });
+
   return new Response(JSON.stringify({ error: "Unauthorized" }), {
     status: 401,
     headers: { "content-type": "application/json" },
