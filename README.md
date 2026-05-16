@@ -57,10 +57,62 @@ Copy from **`.env.example`** and adjust.
 | `DATABASE_URL` | PostgreSQL connection string (required). |
 | `HACKMATE_ADMIN_TOKEN` | If set, protects dashboard/API; omit for open local dev. |
 | `SLNG_API_KEY`, `SLNG_AGENT_ID`, `SLNG_API_BASE` | Outbound calls via SLNG; without `SLNG_API_KEY`, participants stay queued locally. |
-| `SLNG_WEBHOOK_SECRET` | Validates SLNG call-ended webhooks when set. |
+| `SLNG_WEBHOOK_SECRET` | Must match SLNG webhook tool `auth.secret` when using HMAC. Validates inbound call-end requests when set. |
 | `PIONEER_INFERENCE_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID` | Optional transcript extraction. Default URL targets **GLiNER**: `https://api.pioneer.ai/inference` with `X-API-Key` and a model such as `fastino/gliner2-base-v1` ([docs](https://docs.pioneer.ai/api-reference/inference/pioneer)). For **LLM JSON** extraction, use `https://api.pioneer.ai/v1/chat/completions` and a decoder model id. Optional `PIONEER_INFERENCE_THRESHOLD` (0–1). A **custom** HTTPS URL can act as a proxy: `Authorization: Bearer …`, body `{ "transcript" }`, JSON profile response. |
 
 `NEXT_PUBLIC_*` values are embedded at **build time**; change them in Docker/EasyPanel and **rebuild** when deploying.
+
+### SLNG call-end webhook + HMAC signing
+
+HackMate exposes **`POST /api/webhooks/slng/call-ended`**. Align SLNG’s signing secret with **`SLNG_WEBHOOK_SECRET`** (same string in Easypanel and in the agent config).
+
+1. Pick a secret, e.g. `openssl rand -hex 32`.
+2. Set **`SLNG_WEBHOOK_SECRET`** in your deploy env (and local `.`).
+3. In **SLNG** ([Agent Infra](https://docs.slng.ai/dashboard/agent-infra) or PATCH agent API), attach a **system webhook** with `call_end`, your public URL, **`auth.type: "hmac"`**, and **`auth.secret`** equal to that value ([SLNG docs](https://docs.slng.ai/examples/agents-config.md) — webhook `auth`: HMAC sends `X-Signature-256`).
+
+`HackMate` dispatches outbound calls with a `participant_id` argument; include it in the webhook payload so ingestion can locate the participant:
+
+```json
+{
+  "type": "webhook",
+  "id": "REPLACE-WITH-STABLE-UUID",
+  "name": "hackmate_call_end",
+  "description": "Post call results to HackMate",
+  "url": "https://YOUR_DOMAIN/api/webhooks/slng/call-ended",
+  "parameters": { "type": "object", "properties": {}, "required": [] },
+  "auth": {
+    "type": "hmac",
+    "secret": "SAME_SECRET_AS_SLNG_WEBHOOK_SECRET_ENV"
+  },
+  "source": "system",
+  "wait_for_response": false,
+  "system": {
+    "triggers": [{ "event": "call_end" }],
+    "arguments": [
+      {
+        "name": "participant_id",
+        "type": "string",
+        "required": true,
+        "source": { "type": "template", "template": "{{participant_id}}" }
+      },
+      {
+        "name": "call_id",
+        "type": "string",
+        "required": false,
+        "source": { "type": "call_id" }
+      },
+      {
+        "name": "transcript",
+        "type": "transcript_messages",
+        "required": false,
+        "source": { "type": "transcript_messages", "max_messages": 200 }
+      }
+    ]
+  }
+}
+```
+
+Paste the snippet into your agent **`tools`** array (merge with existing tools). **`auth.secret`** and **`SLNG_WEBHOOK_SECRET`** must match exactly. Omit **`SLNG_WEBHOOK_SECRET`** only in trusted local dev.
 
 ## Deploy (Docker / EasyPanel)
 
