@@ -31,11 +31,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ slug: string;
     const text = await groqAgentReply(history);
     const spoken = stripCompleteTokenForSpeech(text);
     const { buffer, contentType } = await groqSpeech(spoken || text);
-      return NextResponse.json({
-        text,
-        audioBase64: buffer.toString("base64"),
-        mimeType: contentType,
-      });
+    return NextResponse.json({
+      text,
+      audioBase64: buffer.toString("base64"),
+      mimeType: contentType,
+    });
   } catch {
     return NextResponse.json({ error: "Could not start voice agent" }, { status: 502 });
   }

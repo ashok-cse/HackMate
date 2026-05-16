@@ -99,7 +99,7 @@ export async function groqAgentReply(history: ChatMsg[]): Promise<string> {
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 350,
+      max_completion_tokens: 350,
       temperature: 0.55,
     }),
   });
