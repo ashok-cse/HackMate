@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { setHackathonCampaignPaused } from "@/lib/hackathon-campaign";
-import { hackmateServerLog } from "@/lib/server-log";
+import { hackmateServerLog, truncateForStderrLog } from "@/lib/server-log";
 import { dispatchSlngCall, slngConfigured } from "@/lib/slng";
 
 export const runtime = "nodejs";
@@ -98,6 +98,11 @@ export async function POST(req: Request) {
           reason: result.reason,
           message: result.message,
           httpStatus: "status" in result ? result.status : undefined,
+          slngApiBase: !result.ok && "apiBase" in result ? result.apiBase : undefined,
+          slngBodySnippet:
+            !result.ok && "detail" in result
+              ? truncateForStderrLog(result.detail)
+              : undefined,
         },
         "warn",
       );
