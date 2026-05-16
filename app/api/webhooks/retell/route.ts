@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractAndStoreParticipantProfile } from "@/lib/participant-voice-ingest";
-import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
+import { verifyRetellWebhookSignatureAny } from "@/lib/retell-webhook-verify";
 import { transcriptToText } from "@/lib/transcript";
 
 export const runtime = "nodejs";
@@ -63,21 +63,26 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  const verifyKey =
-    process.env.RETELL_WEBHOOK_VERIFICATION_KEY?.trim() || process.env.RETELL_API_KEY?.trim();
+  const verifyKeys = [
+    ...new Set(
+      [process.env.RETELL_WEBHOOK_VERIFICATION_KEY, process.env.RETELL_API_KEY]
+        .map((k) => k?.trim())
+        .filter((k): k is string => Boolean(k)),
+    ),
+  ];
   const sig =
     req.headers.get("x-retell-signature") ?? req.headers.get("X-Retell-Signature");
   const strictUnsigned =
     process.env.RETELL_WEBHOOK_REJECT_UNSIGNED?.trim().toLowerCase() === "true";
 
-  if (verifyKey) {
+  if (verifyKeys.length > 0) {
     if (sig) {
-      if (!verifyRetellWebhookSignature(rawBody, verifyKey, sig)) {
+      if (!verifyRetellWebhookSignatureAny(rawBody, verifyKeys, sig)) {
         return NextResponse.json(
           {
             error: "Invalid signature",
             hint:
-              "Use an API key with the webhook badge in Retell and set RETELL_WEBHOOK_VERIFICATION_KEY (or RETELL_API_KEY) to that key. See https://docs.retellai.com/features/secure-webhook",
+              "Sign with the Retell API key that has the webhook badge (Dashboard → API Keys). Set RETELL_WEBHOOK_VERIFICATION_KEY to that key if RETELL_API_KEY is a different key used only for outbound calls. Server clock must be accurate (within ~5m of Retell). Docs: https://docs.retellai.com/features/secure-webhook",
           },
           { status: 401 },
         );
@@ -88,12 +93,8 @@ export async function POST(req: Request) {
         { status: 401 },
       );
     } else {
-      return NextResponse.json({
-        ok: true,
-        test: true,
-        message:
-          "HackMate: no X-Retell-Signature (Retell dashboard “Test” often omits it). Live call_ended events are signed. Verification key must be webhook-enabled.",
-      });
+      /* Retell “Test webhook” often omits the signature; live deliveries include it. */
+      return new NextResponse(null, { status: 204 });
     }
   }
 
@@ -181,12 +182,14 @@ export async function POST(req: Request) {
       })
     : null;
 
-  const row = existingCall
-    ? await prisma.call.update({
-        where: { id: existingCall.id },
-        data: callData,
-      })
-    : await prisma.call.create({ data: callData });
+  if (existingCall) {
+    await prisma.call.update({
+      where: { id: existingCall.id },
+      data: callData,
+    });
+  } else {
+    await prisma.call.create({ data: callData });
+  }
 
   await prisma.participant.update({
     where: { id: participantId },
