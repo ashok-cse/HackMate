@@ -105,7 +105,7 @@ model Participant {
 model Call {
   id              String    @id @default(uuid())
   participantId   String
-  provider        String    @default("slng")
+  provider        String    @default("retell")
   providerCallId  String?
   status          String?
   transcript      Json?

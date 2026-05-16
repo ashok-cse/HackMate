@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       queued: result.count,
       dispatched: 0,
       failed: 0,
-      note: "Queued locally. Configure Retell (RETELL_API_KEY, RETELL_FROM_NUMBER) or SLNG (SLNG_API_KEY, SLNG_AGENT_ID); optional PHONE_VOICE_PROVIDER=retell|slng|auto.",
+      note: "Queued locally. Configure Retell AI outbound: RETELL_API_KEY and RETELL_FROM_NUMBER.",
     });
   }
 
@@ -85,7 +85,6 @@ export async function POST(req: Request) {
             rawPayload: {
               dispatch: {
                 provider: result.provider,
-                apiBase: result.apiBase ?? null,
                 message: result.message ?? null,
               },
             },
@@ -106,7 +105,6 @@ export async function POST(req: Request) {
           reason: result.reason,
           message: result.message,
           httpStatus: "status" in result ? result.status : undefined,
-          apiBase: !result.ok && "apiBase" in result ? result.apiBase : undefined,
           bodySnippet:
             !result.ok && "detail" in result
               ? truncateForStderrLog(result.detail)
@@ -118,7 +116,7 @@ export async function POST(req: Request) {
         prisma.call.create({
           data: {
             participantId: participant.id,
-            provider: result.provider ?? phoneProvider ?? "slng",
+            provider: result.provider ?? phoneProvider ?? "retell",
             status: "dispatch_failed",
             rawPayload: { dispatchError: result },
           },

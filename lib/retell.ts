@@ -1,6 +1,7 @@
 import type { Participant } from "@prisma/client";
-import { participantSlngArguments, validSlngPhone } from "@/lib/slng";
+import { participantVoiceMetadata, validE164Phone } from "@/lib/phone-voice-metadata";
 
+/** Retell AI (https://www.retellai.com/) — phone API host for outbound calls. */
 const RETELL_API = "https://api.retellai.com";
 
 export type RetellDispatchResult =
@@ -55,7 +56,7 @@ export function retellConfigured(): boolean {
 }
 
 export function validRetellPhone(phone: string): boolean {
-  return validSlngPhone(phone);
+  return validE164Phone(phone);
 }
 
 export async function dispatchRetellCall(
@@ -80,7 +81,7 @@ export async function dispatchRetellCall(
     };
   }
 
-  const args = participantSlngArguments(participant);
+  const args = participantVoiceMetadata(participant);
   const metadata: Record<string, string> = { ...args };
   const agentOverride = retellOverrideAgentId();
 

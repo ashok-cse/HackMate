@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ok: true,
       queued: true,
       message:
-        "Marked queued. Set Retell (RETELL_API_KEY, RETELL_FROM_NUMBER) or SLNG (SLNG_API_KEY, SLNG_AGENT_ID).",
+        "Marked queued. Set Retell AI (RETELL_API_KEY, RETELL_FROM_NUMBER).",
     });
   }
 
@@ -43,7 +43,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       prisma.call.create({
         data: {
           participantId: participant.id,
-          provider: result.provider ?? "slng",
+          provider: result.provider ?? "retell",
           status: "dispatch_failed",
           rawPayload: { dispatchError: result },
         },
@@ -69,7 +69,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         rawPayload: {
           dispatch: {
             provider: result.provider,
-            apiBase: result.apiBase ?? null,
             message: result.message ?? null,
           },
         },

@@ -1,6 +1,6 @@
 # HackMate
 
-Hackathon **voice-call** pipeline: **SLNG** places calls → **call-ended webhook** delivers transcripts → **Pioneer (GLiNER or LLM)** plus heuristics extract a profile → **rule/score matching** and **team formation** → **organizer dashboard** (participants, teams, export).
+Hackathon **voice-call** pipeline: **Retell AI** places outbound calls → **`call_ended` webhook** delivers transcripts → **Pioneer (GLiNER or LLM)** plus heuristics extract a profile → **rule/score matching** and **team formation** → **organizer dashboard** (participants, teams, export).
 
 ## Stack
 
@@ -15,8 +15,8 @@ Hackathon **voice-call** pipeline: **SLNG** places calls → **call-ended webhoo
 
 - **Dashboard** (`/dashboard`) — stats, participant list/detail, CSV upload, unmatched view, teams, export.
 - **Auth** — optional `HACKMATE_ADMIN_TOKEN`; login at `/login` when set.
-- **Campaigns** — start/pause outbound calling by hackathon; integrates with **SLNG Agent Infra** when configured.
-- **Webhooks** — `POST /api/webhooks/slng/call-ended` ingests transcripts and runs extraction + matching hooks.
+- **Campaigns** — start/pause outbound calling by hackathon; uses **Retell AI** when `RETELL_*` is configured.
+- **Webhooks** — `POST /api/webhooks/retell` ingests **Retell** `call_ended` events and runs extraction + matching hooks.
 - **Extraction** — optional [Pioneer](https://docs.pioneer.ai/) native **`/inference`** (GLiNER NER) or OpenAI-compatible **chat completions** (decoder LLM); otherwise local heuristics. See **Environment**.
 - **Public events** — create events under **Dashboard → Events**, share `/e/<slug>` for registration; **Promote to participants** pulls signups into the main pipeline.
 
@@ -56,63 +56,15 @@ Copy from **`.env.example`** and adjust.
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string (required). |
 | `HACKMATE_ADMIN_TOKEN` | If set, protects dashboard/API; omit for open local dev. |
-| `SLNG_API_KEY`, `SLNG_AGENT_ID`, `SLNG_API_BASE` | Outbound calls via SLNG; without `SLNG_API_KEY`, participants stay queued locally. |
-| `SLNG_WEBHOOK_SECRET` | Must match SLNG webhook tool `auth.secret` when using HMAC. Validates inbound call-end requests when set. |
+| `RETELL_API_KEY`, `RETELL_FROM_NUMBER` | Outbound calls via [Retell AI](https://www.retellai.com/); without both, participants stay queued locally until you configure them. |
+| `RETELL_AGENT_ID` | Optional override if the caller ID is not already bound to an agent. |
 | `PIONEER_INFERENCE_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID` | Optional transcript extraction. Default URL targets **GLiNER**: `https://api.pioneer.ai/inference` with `X-API-Key` and a model such as `fastino/gliner2-base-v1` ([docs](https://docs.pioneer.ai/api-reference/inference/pioneer)). For **LLM JSON** extraction, use `https://api.pioneer.ai/v1/chat/completions` and a decoder model id. Optional `PIONEER_INFERENCE_THRESHOLD` (0–1). A **custom** HTTPS URL can act as a proxy: `Authorization: Bearer …`, body `{ "transcript" }`, JSON profile response. |
 
 `NEXT_PUBLIC_*` values are embedded at **build time**; change them in Docker/EasyPanel and **rebuild** when deploying.
 
-### SLNG call-end webhook + HMAC signing
+### Retell AI webhooks
 
-HackMate exposes **`POST /api/webhooks/slng/call-ended`**. Align SLNG’s signing secret with **`SLNG_WEBHOOK_SECRET`** (same string in Easypanel and in the agent config).
-
-1. Pick a secret, e.g. `openssl rand -hex 32`.
-2. Set **`SLNG_WEBHOOK_SECRET`** in your deploy env (and local `.`).
-3. In **SLNG** ([Agent Infra](https://docs.slng.ai/dashboard/agent-infra) or PATCH agent API), attach a **system webhook** with `call_end`, your public URL, **`auth.type: "hmac"`**, and **`auth.secret`** equal to that value ([SLNG docs](https://docs.slng.ai/examples/agents-config.md) — webhook `auth`: HMAC sends `X-Signature-256`).
-
-`HackMate` dispatches outbound calls with a `participant_id` argument; include it in the webhook payload so ingestion can locate the participant:
-
-```json
-{
-  "type": "webhook",
-  "id": "REPLACE-WITH-STABLE-UUID",
-  "name": "hackmate_call_end",
-  "description": "Post call results to HackMate",
-  "url": "https://YOUR_DOMAIN/api/webhooks/slng/call-ended",
-  "parameters": { "type": "object", "properties": {}, "required": [] },
-  "auth": {
-    "type": "hmac",
-    "secret": "SAME_SECRET_AS_SLNG_WEBHOOK_SECRET_ENV"
-  },
-  "source": "system",
-  "wait_for_response": false,
-  "system": {
-    "triggers": [{ "event": "call_end" }],
-    "arguments": [
-      {
-        "name": "participant_id",
-        "type": "string",
-        "required": true,
-        "source": { "type": "template", "template": "{{participant_id}}" }
-      },
-      {
-        "name": "call_id",
-        "type": "string",
-        "required": false,
-        "source": { "type": "call_id" }
-      },
-      {
-        "name": "transcript",
-        "type": "transcript_messages",
-        "required": false,
-        "source": { "type": "transcript_messages", "max_messages": 200 }
-      }
-    ]
-  }
-}
-```
-
-Paste the snippet into your agent **`tools`** array (merge with existing tools). **`auth.secret`** and **`SLNG_WEBHOOK_SECRET`** must match exactly. Omit **`SLNG_WEBHOOK_SECRET`** only in trusted local dev.
+Register **`POST https://YOUR_DOMAIN/api/webhooks/retell`** in the Retell dashboard for **`call_ended`** events. Outbound calls attach `participant_id` in metadata and dynamic variables so the webhook can match the participant. If **`RETELL_API_KEY`** is set, requests are verified with the **`x-retell-signature`** header.
 
 ## Deploy (Docker / EasyPanel)
 
@@ -145,7 +97,7 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="postgresql://..." -e HACKMATE_ADMI
 | `GET` | `/api/public/events/[slug]`, `POST` …`/register` | Public event page + signup. |
 | `POST` | `/api/participants/upload-csv` | Multipart `file`. |
 | `POST` | `/api/campaigns/start`, `/api/campaigns/pause` | Calling campaign control. |
-| `POST` | `/api/webhooks/slng/call-ended` | SLNG call-end payload (transcript, `participant_id`, …). |
+| `POST` | `/api/webhooks/retell` | Retell AI `call_ended` (transcript, metadata with `participant_id`, …). |
 | `POST` | `/api/matching/generate` | `{ hackathonName }` |
 | `POST` | `/api/teams/finalize` | `{ hackathonName }` |
 | `GET` | `/api/export/[kind]` | Query `hackathon`; kinds include `final-teams`, `participants`, `unmatched`, `calls`. |

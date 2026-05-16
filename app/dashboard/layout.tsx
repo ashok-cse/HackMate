@@ -10,7 +10,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)] px-4 py-3">
           <HackathonFilter />
           <p className="text-xs text-[var(--muted)]">
-            Voice matching MVP · phone (Retell / SLNG) + browser voice + Pioneer extraction
+            Voice matching MVP · phone (
+            <a
+              href="https://www.retellai.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--muted)] underline-offset-2 hover:text-[var(--foreground)] hover:underline"
+            >
+              Retell AI
+            </a>
+            ) + browser voice + Pioneer extraction
           </p>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>

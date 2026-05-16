@@ -16,7 +16,7 @@ export type IngestVoiceOpts = {
   rawPayload?: object | null;
 };
 
-/** Shared extraction + profile upsert used by phone webhooks (SLNG / Retell) and browser voice submit. */
+/** Shared extraction + profile upsert used by phone webhooks (Retell AI) and browser voice submit. */
 export async function extractAndStoreParticipantProfile(
   participantId: string,
   transcriptText: string,

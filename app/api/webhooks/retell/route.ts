@@ -54,7 +54,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     path: "/api/webhooks/retell",
-    hint: "Configure Retell (retell.ai) webhooks as POST call_ended to this URL.",
+    hint: "Configure webhooks at https://www.retellai.com/ → dashboard: POST call_ended to this URL.",
   });
 }
 
