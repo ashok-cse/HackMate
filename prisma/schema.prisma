@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AppSettings {
+  id             String   @id @default("global")
+  campaignPaused Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+}
+
+model Event {
+  id                 String   @id @default(uuid())
+  slug               String   @unique
+  title              String
+  description        String?
+  locationSummary    String?
+  startsAt           DateTime?
+  endsAt             DateTime?
+  registrationOpen   Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  registrations EventRegistration[]
+  participants  Participant[]
+
+  @@map("events")
+}
+
+/** Public RSVP / signup before promotion into the calling & matching pipeline (Participant). */
+model EventRegistration {
+  id                  String   @id @default(uuid())
+  eventId             String
+  event               Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  fullName            String
+  email               String
+  phone               String
+  city                String?
+  universityOrCompany String?
+  registrationType    String?
+  knownSkills         String?
+  existingTeamName    String?
+  notes               String?
+  consentToCall       Boolean  @default(false)
+
+  promotedParticipantId String? @unique
+  promotedParticipant   Participant? @relation("RegistrationPromotion", fields: [promotedParticipantId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, email])
+  @@index([eventId])
+  @@map("event_registrations")
+}
+
+model Participant {
+  id                     String   @id @default(uuid())
+  externalRegistrationId String?
+  fullName               String
+  email                  String   @unique
+  phone                  String
+  city                   String?
+  hackathonName          String
+  universityOrCompany    String?
+  registrationType       String?
+  knownSkills            String?
+  existingTeamName       String?
+  notes                  String?
+  consentToCall          Boolean  @default(false)
+  callStatus             String   @default("not_queued")
+  profileStatus          String   @default("pending")
+  finalTeamId            String?
+  organizerNotes         String?
+  eventId                String?
+  event                  Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  calls           Call[]
+  profile         ParticipantProfile?
+  teamMemberships TeamMember[]
+  promotedFromRegistration EventRegistration? @relation("RegistrationPromotion")
+
+  @@index([hackathonName])
+  @@index([callStatus])
+  @@index([eventId])
+  @@map("participants")
+}
+
+model Call {
+  id              String    @id @default(uuid())
+  participantId   String
+  provider        String    @default("slng")
+  providerCallId  String?
+  status          String?
+  transcript      Json?
+  transcriptText  String?
+  recordingUrl    String?
+  consentGiven    Boolean?
+  durationSeconds Int?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  rawPayload      Json?
+  createdAt       DateTime  @default(now())
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@map("calls")
+}
+
+model ParticipantProfile {
+  id                     String   @id @default(uuid())
+  participantId          String     @unique
+  skills                 Json?
+  primaryRole            String?
+  strongestSkill         String?
+  experienceLevel        String?
+  projectIdea            String?
+  ideaSummary            String?
+  domainInterests        Json?
+  wantsToLead            Boolean?
+  openToJoinOtherTeam    Boolean?
+  preferredTeamSize      Int?
+  neededTeammates        Json?
+  availability           String?
+  existingTeamStatus     String?
+  confidenceScore        Float?
+  missingFields          Json?
+  extractionNotes        String?
+  pioneerModelId         String?
+  rawExtraction          Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("participant_profiles")
+}
+
+model Team {
+  id              String   @id @default(uuid())
+  hackathonName   String
+  teamName        String
+  projectTitle    String?
+  projectSummary  String?
+  domain          String?
+  matchScore      Float?
+  status          String   @default("suggested")
+  reason          String?
+  risks           Json?
+  organizerNotes  String?
+  locked          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members TeamMember[]
+
+  @@index([hackathonName])
+  @@map("teams")
+}
+
+model TeamMember {
+  id             String   @id @default(uuid())
+  teamId         String
+  participantId  String
+  suggestedRole  String?
+  isLead         Boolean  @default(false)
+  source         String   @default("algorithm")
+  createdAt      DateTime @default(now())
+
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId])
+  @@index([teamId])
+  @@map("team_members")
+}
