@@ -16,7 +16,7 @@ export type IngestVoiceOpts = {
   rawPayload?: object | null;
 };
 
-/** Shared extraction + profile upsert used by SLNG webhook and browser voice submit. */
+/** Shared extraction + profile upsert used by phone webhooks (SLNG / Retell) and browser voice submit. */
 export async function extractAndStoreParticipantProfile(
   participantId: string,
   transcriptText: string,
@@ -98,7 +98,7 @@ function normalizeCallStatus(status: string | undefined, consentGiven: boolean):
 }
 
 /**
- * Creates a Call row and runs the same profile extraction as the SLNG call-ended webhook.
+ * Creates a Call row and runs the same profile extraction as phone call-ended webhooks.
  */
 export async function ingestParticipantVoiceTranscript(opts: IngestVoiceOpts) {
   const participant = await prisma.participant.findUnique({ where: { id: opts.participantId } });
