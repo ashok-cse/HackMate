@@ -26,10 +26,12 @@ function getSpeechRecognition(): SpeechRecCtor | null {
 
 type Props = {
   eventSlug: string;
-  registrationId: string;
+  inviteToken: string;
+  /** Omit outer card wrapper (e.g. voice assessment page provides the card). */
+  bare?: boolean;
 };
 
-export function WebVoiceProfileForm({ eventSlug, registrationId }: Props) {
+export function WebVoiceProfileForm({ eventSlug, inviteToken, bare }: Props) {
   const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
   const [browserError, setBrowserError] = useState<string | null>(null);
@@ -117,11 +119,14 @@ export function WebVoiceProfileForm({ eventSlug, registrationId }: Props) {
       return;
     }
     setSubmitting(true);
-    const res = await fetch(`/api/public/events/${encodeURIComponent(eventSlug)}/voice-profile`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ registrationId, transcript: text }),
-    });
+    const res = await fetch(
+      `/api/public/events/${encodeURIComponent(eventSlug)}/voice-assessment/${encodeURIComponent(inviteToken)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transcript: text }),
+      },
+    );
     const data = await res.json();
     setSubmitting(false);
     if (!res.ok) {
@@ -132,8 +137,8 @@ export function WebVoiceProfileForm({ eventSlug, registrationId }: Props) {
     setTranscript("");
   }
 
-  return (
-    <div className="mt-10 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-left shadow-sm">
+  const inner = (
+    <>
       <h3 className="text-lg font-semibold tracking-tight">Voice profile (browser)</h3>
       <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
         Same pipeline as a phone interview: your speech is turned into text, then we extract skills and team-fit
@@ -200,6 +205,10 @@ export function WebVoiceProfileForm({ eventSlug, registrationId }: Props) {
           {submitting ? "Sending…" : "Submit voice profile"}
         </button>
       </form>
-    </div>
+    </>
   );
+
+  if (bare) return inner;
+
+  return <div className="mt-10 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-left shadow-sm">{inner}</div>;
 }

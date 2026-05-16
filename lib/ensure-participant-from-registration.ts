@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendParticipantPromotedEmail } from "@/lib/resend-promoted-email";
+import { newVoiceInviteToken } from "@/lib/voice-invite-token";
 
 /** Ensures an EventRegistration is linked to a Participant (same rules as batch promote). */
 export async function ensureParticipantFromRegistration(registrationId: string, expectedSlug: string) {
@@ -54,19 +54,13 @@ export async function ensureParticipantFromRegistration(registrationId: string, 
       notes: reg.notes?.trim() || null,
       consentToCall: true,
       eventId: reg.event.id,
+      voiceInviteToken: newVoiceInviteToken(),
     },
   });
 
   await prisma.eventRegistration.update({
     where: { id: reg.id },
     data: { promotedParticipantId: participant.id },
-  });
-
-  void sendParticipantPromotedEmail({
-    to: email,
-    fullName: reg.fullName,
-    eventTitle: reg.event.title,
-    eventSlug: reg.event.slug,
   });
 
   return { participantId: participant.id };

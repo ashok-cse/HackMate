@@ -86,6 +86,8 @@ model Participant {
   organizerNotes         String?
   eventId                String?
   event                  Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  /** Secret path segment for /e/{slug}/voice/{token} after promotion (email). */
+  voiceInviteToken       String?  @unique
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

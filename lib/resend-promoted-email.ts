@@ -22,6 +22,7 @@ export type ParticipantPromotedEmail = {
   fullName: string;
   eventTitle: string;
   eventSlug: string;
+  voiceInviteToken: string;
 };
 
 /**
@@ -39,21 +40,25 @@ export async function sendParticipantPromotedEmail(payload: ParticipantPromotedE
   }
 
   const origin = appOrigin();
-  const eventUrl = origin ? `${origin}/e/${encodeURIComponent(payload.eventSlug)}` : null;
+  const path = `/e/${encodeURIComponent(payload.eventSlug)}/voice/${encodeURIComponent(payload.voiceInviteToken)}`;
+  const voiceUrl = origin ? `${origin}${path}` : null;
+
   const firstName = payload.fullName.trim().split(/\s+/)[0] || payload.fullName.trim();
 
-  const linkBlock = eventUrl
-    ? `<p>Event page: <a href="${eventUrl}">${escapeHtml(eventUrl)}</a></p>`
-    : "<p>You can use the same link you used to register for this event.</p>";
+  const ctaBlock = voiceUrl
+    ? `<p style="margin:1.25rem 0"><a href="${voiceUrl}" style="display:inline-block;background:#059669;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Complete voice assessment</a></p>
+       <p style="font-size:0.9em;color:#444">Or open this link: <a href="${voiceUrl}">${escapeHtml(voiceUrl)}</a></p>`
+    : `<p>Complete your voice assessment at: <code style="background:#f4f4f5;padding:2px 6px;border-radius:4px">${escapeHtml(path)}</code></p>
+       <p style="font-size:0.9em;color:#444">Set <strong>NEXT_PUBLIC_APP_URL</strong> in HackMate so the button works in email.</p>`;
 
   const html = `<!DOCTYPE html>
 <html>
 <body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111">
   <p>Hi ${escapeHtml(firstName)},</p>
-  <p>You’ve been added to the <strong>participant</strong> list for <strong>${escapeHtml(payload.eventTitle)}</strong> on HackMate.</p>
-  <p>Organizers may contact you for voice matching and team formation.</p>
-  ${linkBlock}
-  <p style="margin-top:1.5rem;color:#666;font-size:0.9em">— HackMate</p>
+  <p>You’ve been added to the <strong>participant</strong> list for <strong>${escapeHtml(payload.eventTitle)}</strong>.</p>
+  <p>Please complete a short <strong>voice assessment</strong> in your browser (or type your answers). We use the same pipeline as our phone interviews to extract skills and team-fit for matching.</p>
+  ${ctaBlock}
+  <p style="margin-top:1.25rem;color:#666;font-size:0.9em">— HackMate</p>
 </body>
 </html>`;
 
@@ -62,7 +67,7 @@ export async function sendParticipantPromotedEmail(payload: ParticipantPromotedE
     const { error } = await resend.emails.send({
       from,
       to: payload.to,
-      subject: `You're in: ${payload.eventTitle}`,
+      subject: `Voice assessment — ${payload.eventTitle}`,
       html,
     });
     if (error) {

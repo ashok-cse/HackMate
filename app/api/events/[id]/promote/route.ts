@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendParticipantPromotedEmail } from "@/lib/resend-promoted-email";
 import { hackmateServerLog } from "@/lib/server-log";
+import { newVoiceInviteToken } from "@/lib/voice-invite-token";
 
 export const runtime = "nodejs";
 
@@ -40,6 +41,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       continue;
     }
 
+    const voiceInviteToken = newVoiceInviteToken();
     const participant = await prisma.participant.create({
       data: {
         externalRegistrationId: r.id,
@@ -55,6 +57,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         notes: r.notes?.trim() || null,
         consentToCall: true,
         eventId: event.id,
+        voiceInviteToken,
       },
     });
 
@@ -67,6 +70,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       fullName: r.fullName,
       eventTitle: event.title,
       eventSlug: event.slug,
+      voiceInviteToken,
     });
     promoted++;
   }
